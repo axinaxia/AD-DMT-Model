@@ -78,7 +78,7 @@ boots_gethaz_mci<-function(model, age_init, sex, apoe) {
 }
 
 # cumulative hazards for transitions from AD dementia to next stages using the composed msm model
-boots_gethaz_msm<-function(trans_num, age_init, sex) {
+boots_gethaz_msm<-function(age_init, sex) {
   
   sex<-ifelse(sex==0,"MALE","FEMALE")
   newdata<-data.frame(AGE = age_init, SEX = sex)
@@ -98,8 +98,7 @@ boots_gethaz_msm<-function(trans_num, age_init, sex) {
            cycle=row_number()-1) %>% 
     ungroup %>% 
     filter(cycle!=0) %>% 
-    filter(trans==trans_num) %>% 
-    select(haz)
+    select(trans,haz)
   
   return(haz)
 }
@@ -181,6 +180,11 @@ psa_func<-function(sim.seed,
   sample_mcicost<-lopnr_mcilist %>% 
     left_join(mci_svedem_costs,
               relationship = "many-to-many")
+  
+  # generate bootstrapping hazard tables
+  boots_haz_mci_ad<-boots_gethaz_mci(mci_ad_model,age_init_psa,sex_psa,apoegeno_psa)
+  boots_haz_mci_death<-boots_gethaz_mci(mci_death_model,age_init_psa,sex_psa,apoegeno_psa)
+  boots_haz_dem<-boots_gethaz_msm(age_init_psa,sex_psa)
   
   psa_runmodel_cust<-function(rx_cycles, 
                               rx_rr, # treatment effect in risk ratio
@@ -326,24 +330,24 @@ psa_func<-function(sim.seed,
       (exp(mci_inst_age_loghr*(age_init-74.5))),
     
     
-    t1=1-exp(-(boots_gethaz_mci(mci_ad_model,age_init,sex,apoegeno))[model_time,1]*rX),
+    t1=1-exp(-(boots_haz_mci_ad$haz)[model_time]*rX),
     t2=1-exp(-mci_inst_haz_demo),
-    t3=1-exp(-(boots_gethaz_mci(mci_death_model,age_init,sex,apoegeno))[model_time,1]),
-    t4=1-exp(-(boots_gethaz_msm(trans_num=1,age_init,sex))[model_time,1]*rX),
-    t5=1-exp(-(boots_gethaz_msm(trans_num=2,age_init,sex))[model_time,1]),
-    t6=1-exp(-(boots_gethaz_msm(trans_num=3,age_init,sex))[model_time,1]),
-    t7=1-exp(-(boots_gethaz_msm(trans_num=4,age_init,sex))[model_time,1]),
-    t8=1-exp(-(boots_gethaz_msm(trans_num=5,age_init,sex))[model_time,1]),
-    t9=1-exp(-(boots_gethaz_msm(trans_num=6,age_init,sex))[model_time,1]),
-    t10=1-exp(-(boots_gethaz_msm(trans_num=7,age_init,sex))[model_time,1]),
-    t11=1-exp(-(boots_gethaz_msm(trans_num=8,age_init,sex))[model_time,1]),
-    t12=1-exp(-(boots_gethaz_mci(mci_ad_model,age_init,sex,apoegeno))[model_time,1]*exp(log(rX)*rx_inst)),
-    t13=1-exp(-(boots_gethaz_mci(mci_death_model,age_init,sex,apoegeno))[model_time,1]),
-    t14=1-exp(-(boots_gethaz_msm(trans_num=9,age_init,sex))[model_time,1]*exp(log(rX)*rx_inst)),
-    t15=1-exp(-(boots_gethaz_msm(trans_num=10,age_init,sex))[model_time,1]),
-    t16=1-exp(-(boots_gethaz_msm(trans_num=11,age_init,sex))[model_time,1]),
-    t17=1-exp(-(boots_gethaz_msm(trans_num=12,age_init,sex))[model_time,1]),
-    t18=1-exp(-(boots_gethaz_msm(trans_num=13,age_init,sex))[model_time,1])
+    t3=1-exp(-(boots_haz_mci_death$haz)[model_time]),
+    t4=1-exp(-((boots_haz_dem %>% filter(trans==1))$haz)[model_time]*rX),
+    t5=1-exp(-((boots_haz_dem %>% filter(trans==2))$haz)[model_time]),
+    t6=1-exp(-((boots_haz_dem %>% filter(trans==3))$haz)[model_time]),
+    t7=1-exp(-((boots_haz_dem %>% filter(trans==4))$haz)[model_time]),
+    t8=1-exp(-((boots_haz_dem %>% filter(trans==5))$haz)[model_time]),
+    t9=1-exp(-((boots_haz_dem %>% filter(trans==6))$haz)[model_time]),
+    t10=1-exp(-((boots_haz_dem %>% filter(trans==7))$haz)[model_time]),
+    t11=1-exp(-((boots_haz_dem %>% filter(trans==8))$haz)[model_time]),
+    t12=1-exp(-(boots_haz_mci_ad$haz)[model_time]*exp(log(rX)*rx_inst)),
+    t13=1-exp(-(boots_haz_mci_death$haz)[model_time]),
+    t14=1-exp(-((boots_haz_dem %>% filter(trans==9))$haz)[model_time]*exp(log(rX)*rx_inst)),
+    t15=1-exp(-((boots_haz_dem %>% filter(trans==10))$haz)[model_time]),
+    t16=1-exp(-((boots_haz_dem %>% filter(trans==11))$haz)[model_time]),
+    t17=1-exp(-((boots_haz_dem %>% filter(trans==12))$haz)[model_time]),
+    t18=1-exp(-((boots_haz_dem %>% filter(trans==13))$haz)[model_time])
   )
   
   # Define states, costs and utilities----
@@ -358,7 +362,14 @@ psa_func<-function(sim.seed,
               (cost_mci[1]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
               (cost_mci[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
-    rx.time=rxtime*cycle_length # treatment time/cycle = 1/(no.cycles/year) - full treatment time every cycle
+    rx.time=rxtime*cycle_length, # treatment time/cycle = 1/(no.cycles/year) - full treatment time every cycle
+    
+    cost_care=cost_mci[1]*cycle_length*disc_cost,
+    
+    cost_admin=cost_admin*disc_cost,
+    
+    cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+                 cost_irr*prob_irr)*disc_cost
   )
   Mild = define_state(
     utility = (utilities_mild*(1-prob_severe_aria-prob_irr)+
@@ -371,17 +382,30 @@ psa_func<-function(sim.seed,
               (cost_ad[1]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
               (cost_ad[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
-    rx.time=rxtime*cycle_length
+    rx.time=rxtime*cycle_length,
+    
+    cost_care=cost_ad[1]*cycle_length*disc_cost,
+    
+    cost_admin=cost_admin*disc_cost,
+    
+    cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+                 cost_irr*prob_irr)*disc_cost
   )
   Moderate = define_state(
     utility = utilities_mod*cycle_length*disc_health,
     cost = cost_ad[2]*cycle_length*disc_cost,
-    rx.time=0
+    rx.time=0,
+    cost_care=cost_ad[2]*cycle_length*disc_cost,
+    cost_admin=0,
+    cost_aria=0
   )
   Severe = define_state(
     utility = utilities_sev*cycle_length*disc_health,
     cost = cost_ad[3]*cycle_length*disc_cost,
-    rx.time=0
+    rx.time=0,
+    cost_care=cost_ad[3]*cycle_length*disc_cost,
+    cost_admin=0,
+    cost_aria=0
   )
   MCI_inst = define_state(
     utility = (utilities_mci_inst*(1-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
@@ -394,7 +418,14 @@ psa_func<-function(sim.seed,
               (cost_mci[2]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
               (cost_mci[2]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
-    rx.time=rxtime*cycle_length*rx_inst
+    rx.time=rxtime*cycle_length*rx_inst,
+    
+    cost_care=cost_mci[2]*cycle_length*disc_cost,
+    
+    cost_admin=cost_admin*rx_inst*disc_cost,
+    
+    cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+                 cost_irr*prob_irr)*rx_inst*disc_cost
   )
   Mild_inst = define_state(
     utility = (utilities_mild_inst*(1-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
@@ -407,22 +438,38 @@ psa_func<-function(sim.seed,
               (cost_ad[4]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
               (cost_ad[4]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
-    rx.time=rxtime*cycle_length*rx_inst
+    rx.time=rxtime*cycle_length*rx_inst,
+    
+    cost_care=cost_ad[4]*cycle_length*disc_cost,
+    
+    cost_admin=cost_admin*rx_inst*disc_cost,
+    
+    cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+                 cost_irr*prob_irr)*rx_inst*disc_cost
   )
   Moderate_inst = define_state(
     utility = utilities_mod_inst*cycle_length*disc_health,
     cost = cost_ad[5]*cycle_length*disc_cost,
-    rx.time=0
+    rx.time=0,
+    cost_care=cost_ad[5]*cycle_length*disc_cost,
+    cost_admin=0,
+    cost_aria=0
   )
   Severe_inst = define_state(
     utility = utilities_sev_inst*cycle_length*disc_health,
     cost = cost_ad[6]*cycle_length*disc_cost,
-    rx.time=0
+    rx.time=0,
+    cost_care=cost_ad[6]*cycle_length*disc_cost,
+    cost_admin=0,
+    cost_aria=0
   )
   Death = define_state(
     utility = 0,
     cost = 0,
-    rx.time=0
+    rx.time=0,
+    cost_care=0,
+    cost_admin=0,
+    cost_aria=0
   )
   
   # Transitions----
@@ -492,15 +539,33 @@ psa_func<-function(sim.seed,
                              utilities_sev_inst~normal(utilities[8], utilities_sd[8])) 
     
     
-    temp_model_psa<-run_psa(temp_model, psa = psa_para_mod, N = 1)
+    temp_model_psa<-run_psa(temp_model, psa = psa_para_mod, N = 1, keep = T)
+    
+    temp_ly_soc<-temp_model_psa$full$standard[[1]]$counts %>% summarize_all(~sum(.))*cycle_length
+    temp_ly_rx<-temp_model_psa$full$rx[[1]]$counts %>% summarize_all(~sum(.))*cycle_length
     
     temp_model_psa_table<-data.frame(group=temp_model_psa$ps$.strategy_names,
-                                     cost=temp_model_psa$ps$.cost,
-                                     qaly=temp_model_psa$ps$.effect,
-                                     rx.time=temp_model_psa$ps$rx.time) %>% 
-      pivot_wider(names_from=group, values_from=c(cost, qaly, rx.time)) %>% 
+                                       cost=temp_model_psa$ps$.cost,
+                                     cost_care=temp_model_psa$ps$cost_care,
+                                     cost_admin=temp_model_psa$ps$cost_admin,
+                                     cost_aria=temp_model_psa$ps$cost_aria,
+                                       qaly=temp_model_psa$ps$.effect,
+                                       rx.time=temp_model_psa$ps$rx.time) %>% 
+      pivot_wider(names_from=group, values_from=c(cost,cost_care,cost_admin,
+                                                  cost_aria,qaly, rx.time)) %>% 
       select(-rx.time_standard) %>% 
-      set_names(c("cost_soc","cost_rx","effect_soc","effect_rx","rx.time"))
+      set_names(c("cost_soc","cost_rx","cost_care_soc","cost_care_rx",
+                  "cost_admin_soc","cost_admin_rx",
+                  "cost_aria_soc","cost_aria_rx",
+                  "effect_soc","effect_rx","rx.time")) %>% 
+      cbind(temp_ly_soc %>% 
+              set_names(paste0("ly_",c("mci","mild","mod","sev",
+                                       "mci_inst","mild_inst","mod_inst",
+                                       "sev_inst","death"),"_soc"))) %>% 
+      cbind(temp_ly_rx %>% 
+              set_names(paste0("ly_",c("mci","mild","mod","sev",
+                                       "mci_inst","mild_inst","mod_inst",
+                                       "sev_inst","death"),"_rx")))
     
     return(temp_model_psa_table)
   }, error=function(e){

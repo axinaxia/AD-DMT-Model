@@ -21,7 +21,8 @@ scen_runmodel_cust<-function(rx_cycles,
                         start_state,
                         cost_mci,
                         cost_ad,
-                        r # discount rate
+                        r_cost,
+                        r_health# discount rate
 )
 {param <- define_parameters(
   
@@ -36,9 +37,8 @@ scen_runmodel_cust<-function(rx_cycles,
   utilities_sev_inst=utilities[8], 
   utilities_death=0, 
   
-  disc=exp(-r*(model_time-1)*cycle_length), #continuously compounded discounting factor
-  
-  #disc=1/(1+r)^(model_time-1)*cycle_length
+  disc_cost=exp(-r_cost*(model_time-1)*cycle_length), #continuously compounded discounting factor
+  disc_health=exp(-r_health*(model_time-1)*cycle_length),
   
   rx_eff_log=log(rx_rr),
   rx_eff=exp(rx_eff_log),
@@ -213,87 +213,121 @@ MCI = define_state(
   utility = (utilities_mci*(1-prob_severe_aria-prob_irr)+
                (utilities_mci+disutility_aria)*prob_severe_aria+
                (utilities_mci+disutility_irr)*prob_irr)
-  *cycle_length*disc, 
+  *cycle_length*disc_health, 
   
   cost = ((cost_mci[1]*cycle_length+cost_admin)*(1-prob_mild_aria-prob_severe_aria-prob_irr)+
             (cost_mci[1]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria+
             (cost_mci[1]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
-            (cost_mci[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc, # cost/cycle = yearly cost/(no.cycles/year)
+            (cost_mci[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
   
   rx.time=rxtime*cycle_length, # treatment time/cycle = 1/(no.cycles/year) - full treatment time every cycle
-  rx.time.disc=rx.time*disc
+  
+  cost_care=cost_mci[1]*cycle_length*disc_cost,
+  
+  cost_admin=cost_admin*disc_cost,
+  
+  cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+               cost_irr*prob_irr)*disc_cost
 )
 Mild = define_state(
   utility = (utilities_mild*(1-prob_severe_aria-prob_irr)+
                (utilities_mild+disutility_aria)*prob_severe_aria+
                (utilities_mild+disutility_irr)*prob_irr)
-  *cycle_length*disc, 
+  *cycle_length*disc_health, 
   
   cost = ((cost_ad[1]*cycle_length+cost_admin)*(1-prob_mild_aria-prob_severe_aria-prob_irr)+
             (cost_ad[1]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria+
             (cost_ad[1]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
-            (cost_ad[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc, # cost/cycle = yearly cost/(no.cycles/year)
+            (cost_ad[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
   
   rx.time=rxtime*cycle_length,
-  rx.time.disc=rx.time*disc
+  
+  cost_care=cost_ad[1]*cycle_length*disc_cost,
+  
+  cost_admin=cost_admin*disc_cost,
+  
+  cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+               cost_irr*prob_irr)*disc_cost
 )
 Moderate = define_state(
-  utility = utilities_mod*cycle_length*disc,
-  cost = cost_ad[2]*cycle_length*disc,
+  utility = utilities_mod*cycle_length*disc_health,
+  cost = cost_ad[2]*cycle_length*disc_cost,
   rx.time=0,
-  rx.time.disc=0
+  cost_care=cost_ad[2]*cycle_length*disc_cost,
+  cost_admin=0,
+  cost_aria=0
 )
 Severe = define_state(
-  utility = utilities_sev*cycle_length*disc,
-  cost = cost_ad[3]*cycle_length*disc,
+  utility = utilities_sev*cycle_length*disc_health,
+  cost = cost_ad[3]*cycle_length*disc_cost,
   rx.time=0,
-  rx.time.disc=0
+  cost_care=cost_ad[3]*cycle_length*disc_cost,
+  cost_admin=0,
+  cost_aria=0
 )
 MCI_inst = define_state(
   utility = (utilities_mci_inst*(1-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
                (utilities_mci_inst+disutility_aria)*prob_severe_aria*rx_inst+
                (utilities_mci_inst+disutility_irr)*prob_irr*rx_inst)
-  *cycle_length*disc, 
+  *cycle_length*disc_health, 
   
   cost = ((cost_mci[2]*cycle_length+cost_admin*rx_inst)*(1-prob_mild_aria*rx_inst-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
             (cost_mci[2]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria*rx_inst+
             (cost_mci[2]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
-            (cost_mci[2]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc, # cost/cycle = yearly cost/(no.cycles/year)
+            (cost_mci[2]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
   
   rx.time=rxtime*cycle_length*rx_inst,
-  rx.time.disc=rx.time*disc
+  
+  cost_care=cost_mci[2]*cycle_length*disc_cost,
+  
+  cost_admin=cost_admin*rx_inst*disc_cost,
+  
+  cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+               cost_irr*prob_irr)*rx_inst*disc_cost
 )
 Mild_inst = define_state(
   utility = (utilities_mild_inst*(1-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
                (utilities_mild_inst+disutility_aria)*prob_severe_aria*rx_inst+
                (utilities_mild_inst+disutility_irr)*prob_irr*rx_inst)
-  *cycle_length*disc, 
+  *cycle_length*disc_health, 
   
   cost = ((cost_ad[4]*cycle_length+cost_admin*rx_inst)*(1-prob_mild_aria*rx_inst-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
             (cost_ad[4]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria*rx_inst+
             (cost_ad[4]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
-            (cost_ad[4]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc, # cost/cycle = yearly cost/(no.cycles/year)
+            (cost_ad[4]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
   
   rx.time=rxtime*cycle_length*rx_inst,
-  rx.time.disc=rx.time*disc
+  
+  cost_care=cost_ad[4]*cycle_length*disc_cost,
+  
+  cost_admin=cost_admin*rx_inst*disc_cost,
+  
+  cost_aria=(cost_mild_aria*prob_mild_aria+cost_severe_aria*prob_severe_aria+
+               cost_irr*prob_irr)*rx_inst*disc_cost
 )
 Moderate_inst = define_state(
-  utility = utilities_mod_inst*disc*cycle_length,
-  cost = cost_ad[5]*cycle_length*disc,
+  utility = utilities_mod_inst*cycle_length*disc_health,
+  cost = cost_ad[5]*cycle_length*disc_cost,
   rx.time=0,
-  rx.time.disc=0
+  cost_care=cost_ad[5]*cycle_length*disc_cost,
+  cost_admin=0,
+  cost_aria=0
 )
 Severe_inst = define_state(
-  utility = utilities_sev_inst*cycle_length*disc,
-  cost = cost_ad[6]*cycle_length*disc,
+  utility = utilities_sev_inst*cycle_length*disc_health,
+  cost = cost_ad[6]*cycle_length*disc_cost,
   rx.time=0,
-  rx.time.disc=0
+  cost_care=cost_ad[6]*cycle_length*disc_cost,
+  cost_admin=0,
+  cost_aria=0
 )
 Death = define_state(
   utility = 0,
   cost = 0,
   rx.time=0,
-  rx.time.disc=0
+  cost_care=0,
+  cost_admin=0,
+  cost_aria=0
 )
 
 # Transitions----
@@ -339,7 +373,50 @@ res_mod <- run_model(
   effect = utility,
   method='beginning'
 ) 
-return(res_mod)
+
+# summarise results from the hemmod model
+temp_deffect<-summary(res_mod)$res_comp$.deffect[2]
+temp_dcost<-summary(res_mod)$res_comp$.dcost[2]
+
+temp_ly_soc<-res_mod$eval_strategy_list$standard$counts %>% summarize_all(~sum(.))*cycle_length
+temp_ly_rx<-res_mod$eval_strategy_list$rx$counts %>% summarize_all(~sum(.))*cycle_length
+
+temp_qaly_soc<-sum(res_mod$eval_strategy_list$standard$values$utility)
+temp_qaly_rx<-sum(res_mod$eval_strategy_list$rx$values$utility)
+
+temp_costs_soc<-sum(res_mod$eval_strategy_list$standard$values$cost)
+temp_costs_rx<-sum(res_mod$eval_strategy_list$rx$values$cost)
+
+temp_costs_care_soc<-sum(res_mod$eval_strategy_list$standard$values$cost_care)
+temp_costs_care_rx<-sum(res_mod$eval_strategy_list$rx$values$cost_care)
+
+temp_costs_admin_soc<-sum(res_mod$eval_strategy_list$standard$values$cost_admin)
+temp_costs_admin_rx<-sum(res_mod$eval_strategy_list$rx$values$cost_admin)
+
+temp_costs_aria_soc<-sum(res_mod$eval_strategy_list$standard$values$cost_aria)
+temp_costs_aria_rx<-sum(res_mod$eval_strategy_list$rx$values$cost_aria)
+
+temp_rxtime<-sum(res_mod$eval_strategy_list$rx$values$rx.time) # accumulated time on treatment
+
+res_mod_summary<-data.frame(deffect=temp_deffect,dcost=temp_dcost,
+                            ly_mci_soc=temp_ly_soc[["MCI"]],ly_mci_rx=temp_ly_rx[["MCI"]],
+                            ly_mild_soc=temp_ly_soc[["Mild"]],ly_mild_rx=temp_ly_rx[["Mild"]],
+                            ly_mod_soc=temp_ly_soc[["Moderate"]],ly_mod_rx=temp_ly_rx[["Moderate"]],
+                            ly_sev_soc=temp_ly_soc[["Severe"]],ly_sev_rx=temp_ly_rx[["Severe"]],
+                            ly_mci_inst_soc=temp_ly_soc[["MCI_inst"]],ly_mci_inst_rx=temp_ly_rx[["MCI_inst"]],
+                            ly_mild_inst_soc=temp_ly_soc[["Mild_inst"]],ly_mild_inst_rx=temp_ly_rx[["Mild_inst"]],
+                            ly_mod_inst_soc=temp_ly_soc[["Moderate_inst"]],ly_mod_inst_rx=temp_ly_rx[["Moderate_inst"]],
+                            ly_sev_inst_soc=temp_ly_soc[["Severe_inst"]],ly_sev_inst_rx=temp_ly_rx[["Severe_inst"]],
+                            ly_death_soc=temp_ly_soc[["Death"]],ly_death_rx=temp_ly_rx[["Death"]],
+                            qaly_soc=temp_qaly_soc,qaly_rx=temp_qaly_rx,
+                            costs_soc=temp_costs_soc,costs_rx=temp_costs_rx,
+                            costs_care_soc=temp_costs_care_soc,costs_care_rx=temp_costs_care_rx,
+                            costs_admin_soc=temp_costs_admin_soc,costs_admin_rx=temp_costs_admin_rx,
+                            costs_aria_soc=temp_costs_aria_soc,costs_aria_rx=temp_costs_aria_rx,
+                            rxtime=temp_rxtime)
+
+# returns a list of a summary of the model and the model itself
+return(res_mod_summary)
 }
 
 
