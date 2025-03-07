@@ -1169,7 +1169,7 @@ sub_rx_mod_excel<-ce_summary_excel_func(sub_rx_mod_summary)
   
 
 # 8.2. Assuming treatment for varying durations of treatment ----
-rx_duration_mod<-parLapply(cl,c(6,seq(2:9)*12*cycle_length),function(j){
+rx_duration_mod<-parLapply(cl,c(6,c(2:9)/cycle_length),function(j){
   pop_perc<-pop_perc %>% 
     filter(rx_cycles<=j) %>% 
     mutate(pop_perc=pop_perc/sum(pop_perc))
@@ -1195,7 +1195,7 @@ rx_duration_mod<-parLapply(cl,c(6,seq(2:9)*12*cycle_length),function(j){
     return(temp_model[1][[1]] %>% 
              cbind(rx_cycles=rx_cycles_i,age_group=age_group_i,age=age_i,
                    sex=sex_i,apoe=apoe_i,stage=stage_i, perc=perc))
-  }) %>% cbind(rx_duration=j)
+  }) %>% bind_rows() %>% cbind(rx_duration=j)
 }) %>% bind_rows() 
 
 
