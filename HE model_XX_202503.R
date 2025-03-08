@@ -1047,38 +1047,45 @@ dev.off()
 source("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/AD DMT HE model/Statistical analyses/New analyses_XX_202412/HE model_PSA_function_XX_202503.R")
 
 
-# 7.1. Summarize results and draw graphs ----
-n_sim<-2 # add a sequence indicating number of simulations
-sim_prof<-expand.grid(sim=1:n_sim,prof=1:nrow(pop_perc_rx3yr))
+
+n_sim<-10000 # add a sequence indicating number of simulations
+
+psa_pop<-data.frame(rx_cycles=rep(12,4),
+                    age_group=rep("70-74 years",4),
+                    age=rep(72.5,4),
+                    apoe=c(0,0,1,1),
+                    sex=c(0,1,0,1),
+                    stage=rep(0,4))
+
+sim_prof<-expand.grid(sim=1:n_sim,prof=1:nrow(psa_pop))
 
 ncpus = parallel::detectCores()-1
 cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod),
                    library(flexsurv),library(parallel)))
 clusterExport(cl, c("psa_func",
-                    ls(pattern = c("utiliti|model_trans|cycle|_sd|pop_perc")),
+                    ls(pattern = c("utiliti|model_trans|cycle|_sd")),
                     "mci_ad_model","mci_death_model","msm",
-                    "transmat","timepoint_seq","profile_perc",
+                    "transmat","timepoint_seq","psa_pop",
                     "boots_gethaz_mci","boots_gethaz_msm",
                     "get_haz","statenames","getcost",
                     "mci_svedem_costs","costwide","sim_prof"))
 
 
 
-sim_psa<-parLapply(cl,1:2,function(n) {
-  pop_perc<-pop_perc_rx3yr
-  
+
+sim_psa<-parLapply(cl,1:nrow(sim_prof),function(n) {
+
   j<-sim_prof$sim[n]
   i<-sim_prof$prof[n]
   
     sim.seed<-2025 + j
-    rx_cycles_i<-pop_perc[i,]$rx_cycles
-    age_group_i<-pop_perc[i,]$age_group
-    age_i<-pop_perc[i,]$age
-    sex_i<-pop_perc[i,]$sex
-    apoe_i<-pop_perc[i,]$apoe
-    stage_i<-pop_perc[i,]$stage
-    perc<-pop_perc[i,]$pop_perc
+    rx_cycles_i<-psa_pop[i,]$rx_cycles
+    age_group_i<-psa_pop[i,]$age_group
+    age_i<-psa_pop[i,]$age
+    sex_i<-psa_pop[i,]$sex
+    apoe_i<-psa_pop[i,]$apoe
+    stage_i<-psa_pop[i,]$stage
     
     psa_summary<-tryCatch({ # catch error message instead of stopping interations
       psa_func(sim.seed,
@@ -1090,15 +1097,13 @@ sim_psa<-parLapply(cl,1:2,function(n) {
                cost_ad_psa=getcost(costwide),
                r_cost_psa=0.03,
                r_health_psa=0.03) %>% 
-        cbind(rx_cycles=rx_cycles_i,
-              age_group=age_group_i, age=age_i, 
-              sex=sex_i, apoe=apoe_i, stage=stage_i, perc=perc,
+        cbind(age_group=age_group_i, age=age_i, 
+              sex=sex_i, apoe=apoe_i, stage=stage_i,
               error_message=NA)
       
     }, error=function(e) {
-      data.frame(rx_cycles=rx_cycles_i,
-                 age_group=age_group_i, age=age_i, 
-                 sex=sex_i, apoe=apoe_i, stage=stage_i, perc=perc,
+      data.frame(age_group=age_group_i, age=age_i, 
+                 sex=sex_i, apoe=apoe_i, stage=stage_i,
                  error_message=as.character(e$message)) 
     })
     return(psa_summary %>% cbind(sim=j))
@@ -1111,28 +1116,6 @@ stopCluster(cl)
 
 
 
-
-
-# 7.2. Threshold cost-effective price ----
-WTP=seq(100000, 3000000, 100000)
-
-WTP_results<-cross_join(res_psa_table_wide, data.frame(WTP=WTP)) %>%
-  mutate(NMB=incr_qaly*WTP-incr_cost,
-         threshold_price=NMB/rx.time_rx)
-
-CEAC<-WTP_results %>% group_by(WTP) %>%  
-  reframe(tibble::enframe(quantile(threshold_price,c(0.05, 0.5, 0.95)),'quantile', 'threshold_price' )) %>%
-  pivot_wider(id_cols=WTP, names_from=quantile, values_from=threshold_price)
-
-
-ggplot()+
-  geom_ribbon(aes(ymin=`5%`, ymax=`95%`, x=WTP), data=CEAC, alpha=0.2, fill='red'#, outline.type = 'full'
-  )+
-  geom_line(aes(y=`50%`, x=WTP), data=CEAC)+
-  scale_x_continuous(labels = scales::label_comma())+
-  scale_y_continuous(labels = scales::label_comma())+
-  ylab('Threshold cost-effective price')+
-  xlab('Willingness to pay per QALY')
 
 
 
