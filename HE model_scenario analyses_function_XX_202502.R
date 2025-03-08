@@ -119,42 +119,42 @@ scen_runmodel_cust<-function(rx_cycles,
   cost_admin=cost_infusion+cost_mri+cost_phy_visit,
   
   
-  # Probability of ARIA-E
-  prob_mild_ariae=ifelse(apoegeno==0,0.014,0.013),
-  prob_sev_ariae=ifelse(apoegeno==0,0.002,0.008),
+  # Incidence of ARIA-E in the trial
+  inc_mild_ariae=ifelse(apoegeno==0,0.014,0.013),
+  inc_sev_ariae=ifelse(apoegeno==0,0.002,0.008),
   
   haz_mild_ariae=dispatch_strategy(
     standard=0,
-    rx=case_when(model_time==1~-log(1-prob_mild_ariae*0.7), # hazard for first circle
-                 model_time==2~-log(1-prob_mild_ariae*0.2), # hazard for second circle
-                 model_time>=3&model_time<=rx_cycles~-log(1-prob_mild_ariae*0.1)/5, # constant hazard the next circles
+    rx=case_when(model_time==1~-log(1-inc_mild_ariae*0.7), # hazard for first circle
+                 model_time==2~-log(1-inc_mild_ariae*0.2), # hazard for second circle
+                 model_time>=3&model_time<=rx_cycles~-log(1-inc_mild_ariae*0.1)/5, # constant hazard the next circles
                  T~0)),
   
   prob_mild_ariae=1-exp(-haz_mild_ariae), # transition probability
   
   haz_severe_ariae=dispatch_strategy(
     standard=0,
-    rx=case_when(model_time==1~-log(1-prob_sev_ariae*0.7), # hazard for first circle
-                 model_time==2~-log(1-prob_sev_ariae*0.2), # hazard for second circle
-                 model_time>=3&model_time<=rx_cycles~-log(1-prob_sev_ariae*0.1)/5, # constant hazard the next circles
+    rx=case_when(model_time==1~-log(1-inc_sev_ariae*0.7), # hazard for first circle
+                 model_time==2~-log(1-inc_sev_ariae*0.2), # hazard for second circle
+                 model_time>=3&model_time<=rx_cycles~-log(1-inc_sev_ariae*0.1)/5, # constant hazard the next circles
                  T~0)),
   
   prob_severe_ariae=1-exp(-haz_severe_ariae),
   
-  # Probability of isolated ARIA-H
-  prob_mild_ariah=ifelse(apoegeno==0,0.003,0.004),
-  prob_sev_ariah=ifelse(apoegeno==0,0.004,0.003),
+  # Incidence of isolated ARIA-H in the trial
+  inc_mild_ariah=ifelse(apoegeno==0,0.003,0.004),
+  inc_sev_ariah=ifelse(apoegeno==0,0.004,0.003),
   
   haz_mild_ariah=dispatch_strategy(
     standard=0, 
-    rx=case_when(model_time<=rx_cycles~-log(1-prob_mild_ariah)/7, # constant hazard 
+    rx=case_when(model_time<=rx_cycles~-log(1-inc_mild_ariah)/7, # constant hazard 
                  T~0)),
   
   prob_mild_ariah=1-exp(-haz_mild_ariah), # transition probability per cycle
   
   haz_severe_ariah=dispatch_strategy(
     standard=0,
-    rx=case_when(model_time<=rx_cycles~-log(1-prob_sev_ariah)/7, # constant hazard 
+    rx=case_when(model_time<=rx_cycles~-log(1-inc_sev_ariah)/7, # constant hazard 
                  T~0)),
   
   prob_severe_ariah=1-exp(-haz_severe_ariah),

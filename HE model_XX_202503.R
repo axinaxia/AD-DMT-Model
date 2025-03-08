@@ -235,42 +235,42 @@ runmodel_cust<-function(rx_cycles,
   cost_admin=cost_infusion+cost_mri+cost_phy_visit,
   
   
-  # Probability of ARIA-E
-  prob_mild_ariae=ifelse(apoegeno==0,0.014,0.013),
-  prob_sev_ariae=ifelse(apoegeno==0,0.002,0.008),
+  # Incidence of ARIA-E in the trial
+  inc_mild_ariae=ifelse(apoegeno==0,0.014,0.013),
+  inc_sev_ariae=ifelse(apoegeno==0,0.002,0.008),
   
   haz_mild_ariae=dispatch_strategy(
     standard=0,
-    rx=case_when(model_time==1~-log(1-prob_mild_ariae*0.7), # hazard for first circle
-                 model_time==2~-log(1-prob_mild_ariae*0.2), # hazard for second circle
-                 model_time>=3&model_time<=rx_cycles~-log(1-prob_mild_ariae*0.1)/5, # constant hazard the next circles
+    rx=case_when(model_time==1~-log(1-inc_mild_ariae*0.7), # hazard for first circle
+                 model_time==2~-log(1-inc_mild_ariae*0.2), # hazard for second circle
+                 model_time>=3&model_time<=rx_cycles~-log(1-inc_mild_ariae*0.1)/5, # constant hazard the next circles
                  T~0)),
   
   prob_mild_ariae=1-exp(-haz_mild_ariae), # transition probability
   
   haz_severe_ariae=dispatch_strategy(
     standard=0,
-    rx=case_when(model_time==1~-log(1-prob_sev_ariae*0.7), # hazard for first circle
-                 model_time==2~-log(1-prob_sev_ariae*0.2), # hazard for second circle
-                 model_time>=3&model_time<=rx_cycles~-log(1-prob_sev_ariae*0.1)/5, # constant hazard the next circles
+    rx=case_when(model_time==1~-log(1-inc_sev_ariae*0.7), # hazard for first circle
+                 model_time==2~-log(1-inc_sev_ariae*0.2), # hazard for second circle
+                 model_time>=3&model_time<=rx_cycles~-log(1-inc_sev_ariae*0.1)/5, # constant hazard the next circles
                  T~0)),
   
   prob_severe_ariae=1-exp(-haz_severe_ariae),
   
-  # Probability of isolated ARIA-H
-  prob_mild_ariah=ifelse(apoegeno==0,0.003,0.004),
-  prob_sev_ariah=ifelse(apoegeno==0,0.004,0.003),
+  # Incidence of isolated ARIA-H in the trial
+  inc_mild_ariah=ifelse(apoegeno==0,0.003,0.004),
+  inc_sev_ariah=ifelse(apoegeno==0,0.004,0.003),
   
   haz_mild_ariah=dispatch_strategy(
     standard=0, 
-    rx=case_when(model_time<=rx_cycles~-log(1-prob_mild_ariah)/7, # constant hazard 
+    rx=case_when(model_time<=rx_cycles~-log(1-inc_mild_ariah)/7, # constant hazard 
                  T~0)),
   
   prob_mild_ariah=1-exp(-haz_mild_ariah), # transition probability per cycle
   
   haz_severe_ariah=dispatch_strategy(
     standard=0,
-    rx=case_when(model_time<=rx_cycles~-log(1-prob_sev_ariah)/7, # constant hazard 
+    rx=case_when(model_time<=rx_cycles~-log(1-inc_sev_ariah)/7, # constant hazard 
                  T~0)),
   
   prob_severe_ariah=1-exp(-haz_severe_ariah),
@@ -832,7 +832,7 @@ cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod)))
 clusterExport(cl, c("runmodel_cust",
                     ls(pattern = c("utiliti|model_trans|cycle|pop_perc")),
-                    "get_haz","statenames","getcost",
+                    "get_haz","statenames","getcost","profile_perc",
                     "mci_svedem_costs","costwide"))
 
 # 6.1. Define DSA parameters through define_dsa() ----
@@ -1058,7 +1058,7 @@ clusterEvalQ(cl, c(library(tidyverse),library(heemod),
 clusterExport(cl, c("psa_func",
                     ls(pattern = c("utiliti|model_trans|cycle|_sd|pop_perc")),
                     "mci_ad_model","mci_death_model","msm",
-                    "transmat","timepoint_seq",
+                    "transmat","timepoint_seq","profile_perc",
                     "boots_gethaz_mci","boots_gethaz_msm",
                     "get_haz","statenames","getcost",
                     "mci_svedem_costs","costwide","sim_prof"))
@@ -1155,7 +1155,7 @@ cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod)))
 clusterExport(cl, c("scen_runmodel_cust","runmodel_cust",
                     ls(pattern = c("utiliti|model_trans|cycle|pop_perc")),
-                    "get_haz","statenames","getcost",
+                    "get_haz","statenames","getcost","profile_perc",
                     "mci_svedem_costs","costwide"))
 
 # 8.1. Assume effect modifications in subgroups ----
@@ -1202,7 +1202,7 @@ sub_rx_mod_excel<-ce_summary_excel_func(sub_rx_mod_summary)
   
 
 # 8.2. Assuming treatment for varying durations of treatment ----
-rx_duration_mod<-parLapply(cl,c(6,c(2:9)/cycle_length),function(j){
+rx_duration_mod<-parLapply(cl,c(6,c(4:10)/cycle_length),function(j){
   pop_perc<-pop_perc_func(j)
   
   results<-lapply(1:nrow(pop_perc),function(i){
