@@ -134,8 +134,8 @@ prev_mci_mildad<-prev_mildad %>%
           rename(prop=prev_mildad) %>% 
           mutate(stage=1)) %>% 
   arrange(stage,sex,age_group) %>% 
-  mutate(pop_perc=prop/sum(prop),
-         pop_perc_form=round(pop_perc*100,digits = 2))
+  mutate(profile_perc=prop/sum(prop),
+         profile_perc_form=round(profile_perc*100,digits = 2))
 
 
 prev_mci_mildad_apoe<-prev_mci_mildad %>% 
@@ -148,30 +148,31 @@ prev_mci_mildad_apoe<-prev_mci_mildad %>%
 
 
 # create a table indicate proportion of different patient profiles, using average age per age group
-pop_perc<-prev_mci_mildad_apoe %>% 
-  mutate(pop_perc=prop/sum(prop)) %>% 
+profile_perc<-prev_mci_mildad_apoe %>% 
+  mutate(profile_perc=prop/sum(prop)) %>% 
   arrange(stage,apoe,sex,age_group) %>% 
   mutate(age=(age_group-1)*5+52.5,
          age_group=factor(age_group,levels=1:8,
                           labels=c("50-54 years","55-59 years","60-64 years",
                                    "65-69 years","70-74 years","75-79 years",
-                                   "80-84 years","85-89 years")))
+                                   "80-84 years","85-89 years"))) %>% 
+  select(-prop)
 
-sum((pop_perc %>% filter(sex==0))$pop_perc)
-sum((pop_perc %>% filter(sex==1))$pop_perc)
+sum((profile_perc %>% filter(sex==0))$profile_perc)
+sum((profile_perc %>% filter(sex==1))$profile_perc)
 
-sum((pop_perc %>% mutate(age=age*pop_perc))$age)
+sum((profile_perc %>% mutate(age=age*profile_perc))$age)
 
-sum((pop_perc %>% filter(stage==0))$pop_perc)
-sum((pop_perc %>% filter(stage==1))$pop_perc)
+sum((profile_perc %>% filter(stage==0))$profile_perc)
+sum((profile_perc %>% filter(stage==1))$profile_perc)
 
-sum((pop_perc %>% filter(apoe==0))$pop_perc)
-sum((pop_perc %>% filter(apoe==1))$pop_perc)
+sum((profile_perc %>% filter(apoe==0))$profile_perc)
+sum((profile_perc %>% filter(apoe==1))$profile_perc)
 
 
 # create a table indicate proportion of different patient profiles, using detailed age
-pop_perc_detailed<-prev_mci_mildad_apoe %>% 
-  mutate(pop_perc=prop/sum(prop)) %>% 
+profile_perc_detailed<-prev_mci_mildad_apoe %>% 
+  mutate(profile_perc=prop/sum(prop)) %>% 
   arrange(stage,apoe,sex,age_group) %>% 
   mutate(age=case_match(age_group,
                              1~50,
@@ -187,24 +188,25 @@ pop_perc_detailed<-prev_mci_mildad_apoe %>%
   unnest(expanded_rows) %>% 
   filter(!(age_group!=8&expanded_rows==5)) %>% 
   mutate(age=age+expanded_rows,
-         pop_perc=ifelse(age_group!=8,pop_perc/5,pop_perc/6),
+         profile_perc=ifelse(age_group!=8,profile_perc/5,profile_perc/6),
          age_group=factor(age_group,levels=1:8,
                           labels=c("50-54 years","55-59 years","60-64 years",
                                    "65-69 years","70-74 years","75-79 years",
-                                   "80-84 years","85-89 years")))
+                                   "80-84 years","85-89 years"))) %>% 
+  select(-prop)
 
 
 
-sum((pop_perc_detailed %>% filter(sex==0))$pop_perc)
-sum((pop_perc_detailed %>% filter(sex==1))$pop_perc)
+sum((profile_perc_detailed %>% filter(sex==0))$profile_perc)
+sum((profile_perc_detailed %>% filter(sex==1))$profile_perc)
 
-sum((pop_perc_detailed %>% mutate(age=age*pop_perc))$age)
+sum((profile_perc_detailed %>% mutate(age=age*profile_perc))$age)
 
-sum((pop_perc_detailed %>% filter(stage==0))$pop_perc)
-sum((pop_perc_detailed %>% filter(stage==1))$pop_perc)
+sum((profile_perc_detailed %>% filter(stage==0))$profile_perc)
+sum((profile_perc_detailed %>% filter(stage==1))$profile_perc)
 
-sum((pop_perc_detailed %>% filter(apoe==0))$pop_perc)
-sum((pop_perc_detailed %>% filter(apoe==1))$pop_perc)
+sum((profile_perc_detailed %>% filter(apoe==0))$profile_perc)
+sum((profile_perc_detailed %>% filter(apoe==1))$profile_perc)
 
 
 
@@ -212,33 +214,32 @@ sum((pop_perc_detailed %>% filter(apoe==1))$pop_perc)
 
 # 3. Consider dropout ----
 # the probability of discontinuing treatment per cycle: 0.188/18*3
-prob_stop<-0.188/18*3
 
-rx_cycles_table<-data.frame(rx_cycles=seq(1,40,by=1))
-rx_cycles_table<-rx_cycles_table %>% 
-  mutate(prob=(1-prob_stop)^(rx_cycles-1)*prob_stop,
-         prop_stop=prob/sum(prob))
+pop_perc_func<-function(i){
+  prob_stop<-0.188/18*3
+  
+  rx_cycles_table<-data.frame(rx_cycles=seq(1,i,by=1))
+  rx_cycles_table<-rx_cycles_table %>% 
+    mutate(prob=(1-prob_stop)^(rx_cycles-1)*prob_stop,
+           cum_prob=cumsum(prob),
+           prop_stop=ifelse(rx_cycles==max(rx_cycles),1-cum_prob+prob,prob))
+  
+  profile_discontinue_perc<-profile_perc %>% 
+    select(age_group,age,sex,apoe,stage,profile_perc) %>%
+    rowwise() %>%
+    mutate(rx_cycles = list(1:i)) %>% 
+    unnest(rx_cycles) %>% 
+    left_join(rx_cycles_table %>% 
+                select(rx_cycles,prop_stop)) %>% 
+    mutate(pop_perc=profile_perc*prop_stop) %>% 
+    select(-prop_stop)
+  
+  return(profile_discontinue_perc)
+}
 
 
-pop_perc<-pop_perc %>% 
-  select(age_group,age,sex,apoe,stage,pop_perc) %>%
-  rowwise() %>%
-  mutate(rx_cycles = list(1:40)) %>% 
-  unnest(rx_cycles) %>% 
-  left_join(rx_cycles_table %>% 
-              select(rx_cycles,prop_stop)) %>% 
-  mutate(pop_perc=pop_perc*prop_stop)
 
-
-pop_perc_detailed<-pop_perc_detailed %>% 
-  select(age_group,age,sex,apoe,stage,pop_perc) %>%
-  rowwise() %>%
-  mutate(rx_cycles = list(1:40)) %>% 
-  unnest(rx_cycles) %>% 
-  left_join(rx_cycles_table %>% 
-              select(rx_cycles,prop_stop)) %>% 
-  mutate(pop_perc=pop_perc*prop_stop)
   
 
-save(pop_perc,file="pop_perc.RData")
-save(pop_perc_detailed,file="pop_perc_detailed.RData")
+save(profile_perc,file="profile_perc.RData")
+save(profile_perc_detailed,file="profile_perc_detailed.RData")

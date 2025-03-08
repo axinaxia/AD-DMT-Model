@@ -24,7 +24,6 @@ setwd("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/
 
 load("costdata_xx.RData")
 load("models_xx.RData")
-load("pop_perc.RData") # call starting population
 
 
 

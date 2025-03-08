@@ -1,3 +1,5 @@
+rm(list = ls())
+
 library(heemod)
 library(haven)
 library(dplyr)
@@ -27,8 +29,31 @@ load("costdata_xx.RData")
 load("models_xx.RData")
 
 # call starting population
-load("pop_perc.RData")
+load("profile_perc.RData")
 
+
+# function for creating simulation population considering probability of discontinuing treatments
+pop_perc_func<-function(i){
+  prob_stop<-0.188/18*3
+  
+  rx_cycles_table<-data.frame(rx_cycles=seq(1,i,by=1))
+  rx_cycles_table<-rx_cycles_table %>% 
+    mutate(prob=(1-prob_stop)^(rx_cycles-1)*prob_stop,
+           cum_prob=cumsum(prob),
+           prop_stop=ifelse(rx_cycles==max(rx_cycles),1-cum_prob+prob,prob))
+  
+  profile_discontinue_perc<-profile_perc %>% 
+    select(age_group,age,sex,apoe,stage,profile_perc) %>%
+    rowwise() %>%
+    mutate(rx_cycles = list(1:i)) %>% 
+    unnest(rx_cycles) %>% 
+    left_join(rx_cycles_table %>% 
+                select(rx_cycles,prop_stop)) %>% 
+    mutate(pop_perc=profile_perc*prop_stop) %>% 
+    select(-prop_stop)
+  
+  return(profile_discontinue_perc)
+}
 
 # specify models for each transition, except for transition from MCI to institutionalization
 model_trans1<-mci_ad_model # MCI to mild AD
@@ -550,6 +575,7 @@ ce_summary_excel_func<-function(summary){
 
 # 5.1. Calculate cost-effectiveness price at a WTP of 1000000 ----
 QALYval=1000000
+pop_perc_rxc40<-pop_perc_func(40)
 
 # setting up parallel computing
 ncpus = parallel::detectCores()-2
@@ -557,7 +583,11 @@ cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod)))
 clusterExport(cl, c(ls(all.names = TRUE)))
 
-base_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+
+
+base_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  
+  pop_perc<-pop_perc_rxc40
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -588,16 +618,12 @@ stopCluster(cl)
 base_mod_summary<-ce_summary_func(bind_rows(lapply(base_mod,`[[`,"df")))
 
 
-qaly=sum(base_mod_summary$deffect_w)
-cost=sum(base_mod_summary$dcost_w)
+qaly=sum(base_mod_summary$qaly_rx_w)-sum(base_mod_summary$qaly_soc_w)
+cost=sum(base_mod_summary$costs_rx_w)-sum(base_mod_summary$costs_soc_w)
 NMB=qaly*QALYval-cost
 bc_price=NMB/sum(base_mod_summary$rxtime_w)
 bc_price
 
-sum(base_mod_summary$qaly_rx_w)
-sum(base_mod_summary$qaly_soc_w)
-sum(base_mod_summary$costs_rx_w)
-sum(base_mod_summary$costs_soc_w)
 
 base_mod_excel<-ce_summary_excel_func(base_mod_summary)
 
@@ -805,12 +831,13 @@ dev.off()
 cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod)))
 clusterExport(cl, c("runmodel_cust",
-                    ls(pattern = c("utiliti|model_trans|cycle")),
-                    "get_haz","pop_perc","statenames","getcost",
+                    ls(pattern = c("utiliti|model_trans|cycle|pop_perc")),
+                    "get_haz","statenames","getcost",
                     "mci_svedem_costs","costwide"))
 
 # 6.1. Define DSA parameters through define_dsa() ----
-dsa_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+dsa_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  pop_perc<-pop_perc_rxc40
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -892,7 +919,9 @@ dsa_mod_summary<-dsa_mod %>%
 
 # 6.2. Varying discounting rate ----
 # discount rate = 0
-disc0_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+disc0_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  pop_perc<-pop_perc_rxc40
+  
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -927,7 +956,9 @@ disc0_mod_summary<-ce_summary_func(bind_rows(disc0_mod)) %>%
 
 
 # discount rate = 0.05
-disc0.05_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+disc0.05_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  pop_perc<-pop_perc_rxc40
+  
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -1018,23 +1049,25 @@ source("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning
 
 # 7.1. Summarize results and draw graphs ----
 n_sim<-2 # add a sequence indicating number of simulations
-sim_prof<-expand.grid(sim=1:n_sim,prof=1:nrow(pop_perc))
+sim_prof<-expand.grid(sim=1:n_sim,prof=1:nrow(pop_perc_rxc40))
 
 ncpus = parallel::detectCores()-1
 cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod),
                    library(flexsurv),library(parallel)))
 clusterExport(cl, c("psa_func",
-                    ls(pattern = c("utiliti|model_trans|cycle|_sd")),
+                    ls(pattern = c("utiliti|model_trans|cycle|_sd|pop_perc")),
                     "mci_ad_model","mci_death_model","msm",
                     "transmat","timepoint_seq",
                     "boots_gethaz_mci","boots_gethaz_msm",
-                    "get_haz","pop_perc","statenames","getcost",
+                    "get_haz","statenames","getcost",
                     "mci_svedem_costs","costwide","sim_prof"))
 
 
 
 sim_psa<-parLapply(cl,1:2,function(n) {
+  pop_perc<-pop_perc_rxc40
+  
   j<-sim_prof$sim[n]
   i<-sim_prof$prof[n]
   
@@ -1121,12 +1154,14 @@ source("HE model_scenario analyses_function_XX_202502.R")
 cl = makeCluster(ncpus, type="PSOCK")
 clusterEvalQ(cl, c(library(tidyverse),library(heemod)))
 clusterExport(cl, c("scen_runmodel_cust","runmodel_cust",
-                    ls(pattern = c("utiliti|model_trans|cycle")),
-                    "get_haz","pop_perc","statenames","getcost",
+                    ls(pattern = c("utiliti|model_trans|cycle|pop_perc")),
+                    "get_haz","statenames","getcost",
                     "mci_svedem_costs","costwide"))
 
 # 8.1. Assume effect modifications in subgroups ----
-sub_rx_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+sub_rx_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  pop_perc<-pop_perc_rxc40
+  
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -1153,16 +1188,14 @@ sub_rx_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
 sub_rx_mod_summary<-ce_summary_func(bind_rows(sub_rx_mod))
 
 
-qaly=sum(sub_rx_mod_summary$deffect_w)
-cost=sum(sub_rx_mod_summary$dcost_w)
+qaly=sum(sub_rx_mod_summary$qaly_rx_w)-sum(sub_rx_mod_summary$qaly_soc_w)
+cost=sum(sub_rx_mod_summary$costs_rx_w)-sum(sub_rx_mod_summary$costs_soc_w)
 NMB=qaly*QALYval-cost
 sub_rx_price=NMB/sum(sub_rx_mod_summary$rxtime_w)
 sub_rx_price
 
-sum(sub_rx_mod_summary$qaly_rx_w)
-sum(sub_rx_mod_summary$qaly_soc_w)
-sum(sub_rx_mod_summary$costs_rx_w)
-sum(sub_rx_mod_summary$costs_soc_w)
+
+
 
 
 sub_rx_mod_excel<-ce_summary_excel_func(sub_rx_mod_summary)
@@ -1170,9 +1203,7 @@ sub_rx_mod_excel<-ce_summary_excel_func(sub_rx_mod_summary)
 
 # 8.2. Assuming treatment for varying durations of treatment ----
 rx_duration_mod<-parLapply(cl,c(6,c(2:9)/cycle_length),function(j){
-  pop_perc<-pop_perc %>% 
-    filter(rx_cycles<=j) %>% 
-    mutate(pop_perc=pop_perc/sum(pop_perc))
+  pop_perc<-pop_perc_func(j)
   
   results<-lapply(1:nrow(pop_perc),function(i){
     rx_cycles_i<-pop_perc[i,]$rx_cycles
@@ -1203,12 +1234,22 @@ rx_duration_mod<-parLapply(cl,c(6,c(2:9)/cycle_length),function(j){
 
 rx_duration_mod_summary<-ce_summary_func(rx_duration_mod)
 
+rx_duration_mod_summary %>% 
+  group_by(rx_duration) %>% 
+  summarise(dqaly=sum(deffect_w),
+            dcost=sum(dcost_w),
+            rxtime=sum(rxtime_w),
+            nmb=QALYval*dqaly-dcost,
+            price=nmb/rxtime)
+
 
 rx_duration_mod_excel<-ce_summary_excel_func(rx_duration_mod_summary)
 
 
 # 8.3. Treatment across time horizon with waning factor = 0.5 ----
-wf0.5_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+wf0.5_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  pop_perc<-pop_perc_rxc40
+  
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -1234,19 +1275,17 @@ wf0.5_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
 
 
 
-wf0.5_mod_summary<-ce_summary_func(wf0.5_mod)
+wf0.5_mod_summary<-ce_summary_func(bind_rows(wf0.5_mod))
 
 
-qaly=sum(wf0.5_mod_summary$deffect_w)
-cost=sum(wf0.5_mod_summary$dcost_w)
+qaly=sum(wf0.5_mod_summary$qaly_rx_w)-sum(wf0.5_mod_summary$qaly_soc_w)
+cost=sum(wf0.5_mod_summary$costs_rx_w)-sum(wf0.5_mod_summary$costs_soc_w)
 NMB=qaly*QALYval-cost
 wf0.5_price=NMB/sum(wf0.5_mod_summary$rxtime_w)
 wf0.5_price
 
-sum(wf0.5_mod_summary$qaly_rx_w)
-sum(wf0.5_mod_summary$qaly_soc_w)
-sum(wf0.5_mod_summary$costs_rx_w)
-sum(wf0.5_mod_summary$costs_soc_w)
+
+
 
 
 wf0.5_mod_excel<-ce_summary_excel_func(wf0.5_mod_summary)
@@ -1255,8 +1294,8 @@ wf0.5_mod_excel<-ce_summary_excel_func(wf0.5_mod_summary)
 
 # 8.4. Assuming a starting population of only APOE non-carriers or only heterozygotes ----
 # 8.4.1. Assuming a starting population of only APOE non-carriers ----
-apoe0_mod<-parLapply(cl,1:nrow(pop_perc %>% filter(apoe==0)),function(i){
-  pop_perc<-pop_perc %>% 
+apoe0_mod<-parLapply(cl,1:nrow(pop_perc_rxc40 %>% filter(apoe==0)),function(i){
+  pop_perc<-pop_perc_rxc40 %>% 
     filter(apoe==0) %>% 
     mutate(pop_perc=pop_perc/sum(pop_perc))
   
@@ -1283,25 +1322,23 @@ apoe0_mod<-parLapply(cl,1:nrow(pop_perc %>% filter(apoe==0)),function(i){
 })
 
 
-apoe0_mod_summary<-ce_summary_func(apoe0_mod)
+apoe0_mod_summary<-ce_summary_func(bind_rows(apoe0_mod))
 
 
-qaly=sum(apoe0_mod_summary$deffect_w)
-cost=sum(apoe0_mod_summary$dcost_w)
+qaly=sum(apoe0_mod_summary$qaly_rx_w)-sum(apoe0_mod_summary$qaly_soc_w)
+cost=sum(apoe0_mod_summary$costs_rx_w)-sum(apoe0_mod_summary$costs_soc_w)
 NMB=qaly*QALYval-cost
 apoe0_price=NMB/sum(apoe0_mod_summary$rxtime_w)
 apoe0_price
 
-sum(apoe0_mod_summary$qaly_rx_w)
-sum(apoe0_mod_summary$qaly_soc_w)
-sum(apoe0_mod_summary$costs_rx_w)
-sum(apoe0_mod_summary$costs_soc_w)
+
+
 
 apoe0_mod_excel<-ce_summary_excel_func(apoe0_mod_summary)
 
 # 8.4.2. Assuming a starting population of only APOE heterozygotes ----
-apoe1_mod<-parLapply(cl,1:nrow(pop_perc %>% filter(apoe==1)),function(i){
-  pop_perc<-pop_perc %>% 
+apoe1_mod<-parLapply(cl,1:nrow(pop_perc_rxc40 %>% filter(apoe==1)),function(i){
+  pop_perc<-pop_perc_rxc40 %>% 
     filter(apoe==1) %>% 
     mutate(pop_perc=pop_perc/sum(pop_perc))
   
@@ -1330,25 +1367,25 @@ apoe1_mod<-parLapply(cl,1:nrow(pop_perc %>% filter(apoe==1)),function(i){
 
 
 
-apoe1_mod_summary<-ce_summary_func(apoe1_mod)
+apoe1_mod_summary<-ce_summary_func(bind_rows(apoe1_mod))
 
 
-qaly=sum(apoe1_mod_summary$deffect_w)
-cost=sum(apoe1_mod_summary$dcost_w)
+qaly=sum(apoe1_mod_summary$qaly_rx_w)-sum(apoe1_mod_summary$qaly_soc_w)
+cost=sum(apoe1_mod_summary$costs_rx_w)-sum(apoe1_mod_summary$costs_soc_w)
 NMB=qaly*QALYval-cost
 apoe1_price=NMB/sum(apoe1_mod_summary$rxtime_w)
 apoe1_price
 
-sum(apoe1_mod_summary$qaly_rx_w)
-sum(apoe1_mod_summary$qaly_soc_w)
-sum(apoe1_mod_summary$costs_rx_w)
-sum(apoe1_mod_summary$costs_soc_w)
+
+
 
 apoe1_mod_excel<-ce_summary_excel_func(apoe1_mod_summary)
 
 
 # 8.5. Discounting rate 0.03 for costs and no discounting for QALY ----
-disc_diff_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
+disc_diff_mod<-parLapply(cl,1:nrow(pop_perc_rxc40),function(i){
+  pop_perc<-pop_perc_rxc40
+  
   rx_cycles_i<-pop_perc[i,]$rx_cycles
   age_group_i<-pop_perc[i,]$age_group
   age_i<-pop_perc[i,]$age
@@ -1374,19 +1411,17 @@ disc_diff_mod<-parLapply(cl,1:nrow(pop_perc),function(i){
 
 
 
-disc_diff_mod_summary<-ce_summary_func(disc_diff_mod)
+disc_diff_mod_summary<-ce_summary_func(bind_rows(disc_diff_mod))
 
 
-qaly=sum(disc_diff_mod_summary$deffect_w)
-cost=sum(disc_diff_mod_summary$dcost_w)
+qaly=sum(disc_diff_mod_summary$qaly_rx_w)-sum(disc_diff_mod_summary$qaly_soc_w)
+cost=sum(disc_diff_mod_summary$costs_rx_w)-sum(disc_diff_mod_summary$costs_soc_w)
 NMB=qaly*QALYval-cost
 disc_diff_price=NMB/sum(disc_diff_mod_summary$rxtime_w)
 disc_diff_price
 
-sum(disc_diff_mod_summary$qaly_rx_w)
-sum(disc_diff_mod_summary$qaly_soc_w)
-sum(disc_diff_mod_summary$costs_rx_w)
-sum(disc_diff_mod_summary$costs_soc_w)
+
+
 
 disc_diff_mod_excel<-ce_summary_excel_func(disc_diff_mod_summary)
 
