@@ -145,13 +145,13 @@ clustered_boot<-function(data,indices){
 }
 
 set.seed(2025)  
-mci_costs_ci<-round(t(apply((boot(data=mci_svedem_costs, 
+round(t(apply((boot(data=mci_svedem_costs, 
             statistic=clustered_boot, 
             R=10000,
             parallel="multicore", 
             ncpus=18))$t,2,function(x) quantile(x,probs=c(0.025,0.975)))),0)
 
-ad_costs_ci<-round(t(apply((boot(data=costwide, 
+round(t(apply((boot(data=costwide, 
             statistic=clustered_boot, 
             R=10000,
             parallel="multicore", 
@@ -211,17 +211,7 @@ runmodel_cust<-function(rx_cycles,
   utilities_mild_inst=utilities[6], 
   utilities_mod_inst=utilities[7], 
   utilities_sev_inst=utilities[8], 
-  
-  cost_mci_comm=cost_mci[1],
-  cost_mci_inst=cost_mci[2],
-  
-  cost_mild=cost_ad[1],
-  cost_mod=cost_ad[2],
-  cost_sev=cost_ad[3],
-
-  cost_mild_inst=cost_ad[4],
-  cost_mod_inst=cost_ad[5],
-  cost_sev_inst=cost_ad[6],
+  utilities_death=0, 
   
   disc_cost=exp(-r_cost*(model_time-1)*cycle_length), #continuously compounded discounting factor
   disc_health=exp(-r_health*(model_time-1)*cycle_length),
@@ -371,14 +361,14 @@ runmodel_cust<-function(rx_cycles,
                  (utilities_mci+disutility_irr)*prob_irr)
     *cycle_length*disc_health, 
     
-    cost = ((cost_mci_comm*cycle_length+cost_admin)*(1-prob_mild_aria-prob_severe_aria-prob_irr)+
-              (cost_mci_comm*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria+
-              (cost_mci_comm*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
-              (cost_mci_comm*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
+    cost = ((cost_mci[1]*cycle_length+cost_admin)*(1-prob_mild_aria-prob_severe_aria-prob_irr)+
+              (cost_mci[1]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria+
+              (cost_mci[1]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
+              (cost_mci[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
     rx.time=rxtime*cycle_length, # treatment time/cycle = 1/(no.cycles/year) - full treatment time every cycle
     
-    cost_care=cost_mci_comm*cycle_length*disc_cost,
+    cost_care=cost_mci[1]*cycle_length*disc_cost,
     
     cost_admin=cost_admin*disc_cost,
     
@@ -391,14 +381,14 @@ runmodel_cust<-function(rx_cycles,
                  (utilities_mild+disutility_irr)*prob_irr)
     *cycle_length*disc_health, 
     
-    cost = ((cost_mild*cycle_length+cost_admin)*(1-prob_mild_aria-prob_severe_aria-prob_irr)+
-              (cost_mild*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria+
-              (cost_mild*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
-              (cost_mild*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
+    cost = ((cost_ad[1]*cycle_length+cost_admin)*(1-prob_mild_aria-prob_severe_aria-prob_irr)+
+              (cost_ad[1]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria+
+              (cost_ad[1]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria+
+              (cost_ad[1]*cycle_length+cost_admin+cost_irr)*prob_irr)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
     rx.time=rxtime*cycle_length,
     
-    cost_care=cost_mild*cycle_length*disc_cost,
+    cost_care=cost_ad[1]*cycle_length*disc_cost,
     
     cost_admin=cost_admin*disc_cost,
     
@@ -407,17 +397,17 @@ runmodel_cust<-function(rx_cycles,
     )
   Moderate = define_state(
     utility = utilities_mod*cycle_length*disc_health,
-    cost = cost_mod*cycle_length*disc_cost,
+    cost = cost_ad[2]*cycle_length*disc_cost,
     rx.time=0,
-    cost_care=cost_mod*cycle_length*disc_cost,
+    cost_care=cost_ad[2]*cycle_length*disc_cost,
     cost_admin=0,
     cost_aria=0
     )
   Severe = define_state(
     utility = utilities_sev*cycle_length*disc_health,
-    cost = cost_sev*cycle_length*disc_cost,
+    cost = cost_ad[3]*cycle_length*disc_cost,
     rx.time=0,
-    cost_care=cost_sev*cycle_length*disc_cost,
+    cost_care=cost_ad[3]*cycle_length*disc_cost,
     cost_admin=0,
     cost_aria=0
     )
@@ -427,14 +417,14 @@ runmodel_cust<-function(rx_cycles,
                  (utilities_mci_inst+disutility_irr)*prob_irr*rx_inst)
     *cycle_length*disc_health, 
     
-    cost = ((cost_mci_inst*cycle_length+cost_admin*rx_inst)*(1-prob_mild_aria*rx_inst-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
-              (cost_mci_inst*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria*rx_inst+
-              (cost_mci_inst*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
-              (cost_mci_inst*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
+    cost = ((cost_mci[2]*cycle_length+cost_admin*rx_inst)*(1-prob_mild_aria*rx_inst-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
+              (cost_mci[2]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria*rx_inst+
+              (cost_mci[2]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
+              (cost_mci[2]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
     rx.time=rxtime*cycle_length*rx_inst,
     
-    cost_care=cost_mci_inst*cycle_length*disc_cost,
+    cost_care=cost_mci[2]*cycle_length*disc_cost,
     
     cost_admin=cost_admin*rx_inst*disc_cost,
     
@@ -447,14 +437,14 @@ runmodel_cust<-function(rx_cycles,
                  (utilities_mild_inst+disutility_irr)*prob_irr*rx_inst)
     *cycle_length*disc_health, 
     
-    cost = ((cost_mild_inst*cycle_length+cost_admin*rx_inst)*(1-prob_mild_aria*rx_inst-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
-              (cost_mild_inst*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria*rx_inst+
-              (cost_mild_inst*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
-              (cost_mild_inst*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
+    cost = ((cost_ad[4]*cycle_length+cost_admin*rx_inst)*(1-prob_mild_aria*rx_inst-prob_severe_aria*rx_inst-prob_irr*rx_inst)+
+              (cost_ad[4]*cycle_length+cost_admin+cost_mild_aria)*prob_mild_aria*rx_inst+
+              (cost_ad[4]*cycle_length+cost_admin+cost_severe_aria)*prob_severe_aria*rx_inst+
+              (cost_ad[4]*cycle_length+cost_admin+cost_irr)*prob_irr*rx_inst)*disc_cost, # cost/cycle = yearly cost/(no.cycles/year)
     
     rx.time=rxtime*cycle_length*rx_inst,
     
-    cost_care=cost_mild_inst*cycle_length*disc_cost,
+    cost_care=cost_ad[4]*cycle_length*disc_cost,
     
     cost_admin=cost_admin*rx_inst*disc_cost,
     
@@ -463,17 +453,17 @@ runmodel_cust<-function(rx_cycles,
     )
   Moderate_inst = define_state(
     utility = utilities_mod_inst*cycle_length*disc_health,
-    cost = cost_mod_inst*cycle_length*disc_cost,
+    cost = cost_ad[5]*cycle_length*disc_cost,
     rx.time=0,
-    cost_care=cost_mod_inst*cycle_length*disc_cost,
+    cost_care=cost_ad[5]*cycle_length*disc_cost,
     cost_admin=0,
     cost_aria=0
     )
   Severe_inst = define_state(
     utility = utilities_sev_inst*cycle_length*disc_health,
-    cost = cost_sev_inst*cycle_length*disc_cost,
+    cost = cost_ad[6]*cycle_length*disc_cost,
     rx.time=0,
-    cost_care=cost_sev_inst*cycle_length*disc_cost,
+    cost_care=cost_ad[6]*cycle_length*disc_cost,
     cost_admin=0,
     cost_aria=0
     )
@@ -587,13 +577,13 @@ ce_summary_func<-function(results){
 # create a function to organize results that can be exported to excel
 ce_summary_excel_func<-function(summary){
   results_excel<-summary %>% 
-    select(rx_cycles,rxtime,age_group,age,sex,apoe,stage,qaly_soc:costs_rx) %>% 
+    select(rx_cycles,rxtime,age,sex,apoe,stage,qaly_soc:costs_rx) %>% 
     mutate(sex=factor(sex,levels=0:1,labels=c("Male","Female")),
            apoe=factor(apoe,levels=0:1,labels=c("Non-carrier","Heterozygotes")),
            stage=factor(stage,levels=0:1,labels=c("MCI","Mild AD")),
            dqaly=qaly_rx-qaly_soc,
            dcost=costs_rx-costs_soc) %>% 
-    set_names(c("Treatment cycle","Treatment duration (years)","Age group","Age","Sex","APOE genotype",
+    set_names(c("Treatment cycle","Treatment duration (years)","Age","Sex","APOE genotype",
                 "AD stage","QALY-SOC","QALY-treatment",
                 "Costs-SOC","Costs-treatment",
                 "QALY gain","Incremental costs"))
@@ -923,7 +913,7 @@ clusterEvalQ(cl, c(library(tidyverse),library(heemod)))
 clusterExport(cl, c("runmodel_cust",
                     ls(pattern = c("utiliti|model_trans|cycle|pop_perc")),
                     "get_haz","statenames","getcost","profile_perc",
-                    "mci_svedem_costs","costwide","mci_costs_ci","ad_costs_ci"))
+                    "mci_svedem_costs","costwide"))
 
 # 6.1. Define DSA parameters through define_dsa() ----
 dsa_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
@@ -955,17 +945,7 @@ dsa_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
     utilities_mci_inst, utilities_lb[5], utilities_ub[5],
     utilities_mild_inst, utilities_lb[6], utilities_ub[6],
     utilities_mod_inst, utilities_lb[7], utilities_ub[7],
-    utilities_sev_inst, utilities_lb[8], utilities_ub[8],
-    
-    cost_mci_comm, mci_costs_ci[1,1], mci_costs_ci[1,2],
-    cost_mild, ad_costs_ci[1,1], ad_costs_ci[1,2],
-    cost_mod, ad_costs_ci[2,1], ad_costs_ci[2,2],
-    cost_sev, ad_costs_ci[3,1], ad_costs_ci[3,2],
-    
-    cost_mci_inst, mci_costs_ci[2,1], mci_costs_ci[2,2],
-    cost_mild_inst, ad_costs_ci[4,1], ad_costs_ci[4,2],
-    cost_mod_inst, ad_costs_ci[5,1], ad_costs_ci[5,2],
-    cost_sev_inst, ad_costs_ci[6,1], ad_costs_ci[6,2]
+    utilities_sev_inst, utilities_lb[8], utilities_ub[8]
   )
   
   temp_dsa<-run_dsa(
@@ -983,15 +963,7 @@ dsa_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
                             "utilities_mci_inst"~"Utility of institutionalized MCI",
                             "utilities_mild_inst"~"Utility of institutionalized mild AD",
                             "utilities_mod_inst"~"Utility of institutionalized moderate AD",
-                            "utilities_sev_inst"~"Utility of institutionalized severe AD",
-                            "cost_mci_comm"~"Annual costs of care of MCI",
-                            "cost_mild"~"Annual costs of care of mild AD",
-                            "cost_mod"~"Annual costs of care of moderate AD",
-                            "cost_sev"~"Annual costs of care of severe AD",
-                            "cost_mci_inst"~"Annual costs of care of institutionalized MCI",
-                            "cost_mild_inst"~"Annual costs of care of institutionalized mild AD",
-                            "cost_mod_inst"~"Annual costs of care of institutionalized moderate AD",
-                            "cost_sev_inst"~"Annual costs of care of institutionalized severe AD"))
+                            "utilities_sev_inst"~"Utility of institutionalized severe AD"))
   
   temp_dsa_summary<-temp_dsa_summary %>% 
     filter(.strategy_names=="standard") %>% 
@@ -1023,7 +995,9 @@ dsa_mod_summary<-dsa_mod %>%
   ungroup %>% 
   mutate(NMB=QALYval*(effect_rx-effect_soc)-(cost_rx-cost_soc),
          price=NMB/rx.time,
-         price_diff=(price-bc_price)/bc_price)
+         price_diff=price-bc_price,
+         qaly_diff=(effect_rx-effect_soc)-qaly,
+         cost_diff=(cost_rx-cost_soc)-cost)
 
 # 6.2. Varying discounting rate ----
 # discount rate = 0
@@ -1060,7 +1034,9 @@ disc0_mod_summary<-ce_summary_func(bind_rows(disc0_mod)) %>%
             rx.time=sum(rxtime*perc)) %>% 
   mutate(NMB=QALYval*(effect_rx-effect_soc)-(cost_rx-cost_soc),
          price=NMB/rx.time,
-         price_diff=(price-bc_price)/bc_price)
+         price_diff=price-bc_price,
+         qaly_diff=(effect_rx-effect_soc)-qaly,
+         cost_diff=(cost_rx-cost_soc)-cost)
 
 
 # discount rate = 0.05
@@ -1099,55 +1075,60 @@ disc0.05_mod_summary<-ce_summary_func(bind_rows(disc0.05_mod)) %>%
             rx.time=sum(rxtime*perc)) %>% 
   mutate(NMB=QALYval*(effect_rx-effect_soc)-(cost_rx-cost_soc),
          price=NMB/rx.time,
-         price_diff=(price-bc_price)/bc_price)
+         price_diff=price-bc_price,
+         qaly_diff=(effect_rx-effect_soc)-qaly,
+         cost_diff=(cost_rx-cost_soc)-cost)
+
+
+
+dsa_plot_func<-function(out){
+  dsa_plot_data<-dsa_mod_summary %>% 
+    rbind(disc0_mod_summary %>% 
+            mutate(names="Discount rate for costs and health effects",
+                   .par_value=0)) %>% 
+    rbind(disc0.05_mod_summary %>% 
+            mutate(names="Discount rate for costs and health effects",
+                   .par_value=0.05)) %>% 
+    group_by(names) %>% 
+    mutate(level=as.factor(out==max(out))) %>% 
+    mutate(max_absdiff=max(abs(out))) %>% 
+    ungroup %>% 
+    arrange(desc(max_absdiff))
+  
+  factor_level<-(dsa_mod_summary %>% 
+                   group_by(names) %>%
+                   slice_max(abs(price_diff)) %>% 
+                   ungroup %>% 
+                   distinct(names,.keep_all = T) %>%
+                   arrange(abs(price_diff)))$names
+  
+  dsa_mod_summary$names<-factor(dsa_mod_summary$names,levels=factor_level)
+  
+  dsa_plot<-ggplot(dsa_mod_summary, aes(factor(names), price_diff, fill = level)) +
+    geom_bar(stat = "identity") + 
+    geom_text(aes(y = price_diff, label = .par_value),
+              hjust = ifelse(dsa_mod_summary$price_diff > 0, -0.2, 1.2),
+              size = 3, color = "black") +
+    coord_flip() +
+    scale_y_continuous(breaks = seq(-70000, 60000, by = 10000),
+                       labels = scales::label_number(accuracy = 1, big.mark = ",")) +
+    scale_fill_manual(values = c("#E69F00", "#56B4E9")) +
+    labs(y = "Differences in threshold annual drug price",
+         x = "Parameter") +
+    theme_minimal() +
+    theme(legend.position = "none")
+  
+  return(dsa_plot)
+}
+
+
 
 
 
 # 6.3. Tornado plot ----  
-dsa_plot_data<-dsa_mod_summary %>% 
-  mutate(.par_value=as.numeric(.par_value)) %>% 
-  rbind(disc0_mod_summary %>% 
-          mutate(names="Discount rate for costs and health effects",
-                 .par_value=0)) %>% 
-  rbind(disc0.05_mod_summary %>% 
-          mutate(names="Discount rate for costs and health effects",
-                 .par_value=0.05)) %>% 
-  group_by(names) %>% 
-  mutate(level = as.factor(.par_value == max(.par_value)),
-         max_absdiff = max(abs(price_diff))) %>%
-  ungroup %>% 
-  arrange(desc(max_absdiff))
 
-factor_level <- dsa_plot_data %>%
-  group_by(names) %>%
-  slice_max(abs(price_diff)) %>%
-  ungroup() %>%
-  distinct(names, .keep_all = TRUE) %>%
-  arrange(abs(price_diff)) %>%
-  pull(names)
+pdf(file = "tonado.pdf",width = 9,height = 5)
 
-dsa_plot_data$names<-factor(dsa_plot_data$names,levels=factor_level)
-
-
-pdf(file = "tonado.pdf",width = 12,height = 6)
-ggplot(dsa_plot_data, aes(factor(names), price_diff, fill = level)) +
-  geom_bar(stat = "identity") + 
-  geom_text(aes(y = price_diff, label = round(price_diff*100,0)),
-            hjust = ifelse(dsa_plot_data$price_diff > 0, -0.2, 1.2),
-            size = 3, color = "black") +
-  coord_flip()+
-  scale_y_continuous(labels = label_number(scale = 100),
-                     breaks = seq(-1.6,1.4,0.2)) +
-  scale_fill_manual(values = c("#56B4E9","#E69F00"),
-                    labels=c("Lower bound of the range","Upper bound of the range")) +
-  labs(y = "Threshold annual drug price deviation from the base model (%)",
-       x = "Parameter",
-       fill = "Parameter value") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        text = element_text(size=10),
-        axis.text = element_text(size = 10),
-        axis.ticks.length = unit(3, "pt"))
 dev.off()
 
 

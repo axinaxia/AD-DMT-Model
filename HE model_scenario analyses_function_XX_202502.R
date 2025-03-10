@@ -35,7 +35,6 @@ scen_runmodel_cust<-function(rx_cycles,
   utilities_mild_inst=utilities[6], 
   utilities_mod_inst=utilities[7], 
   utilities_sev_inst=utilities[8], 
-  utilities_death=0, 
   
   disc_cost=exp(-r_cost*(model_time-1)*cycle_length), #continuously compounded discounting factor
   disc_health=exp(-r_health*(model_time-1)*cycle_length),
@@ -375,9 +374,6 @@ res_mod <- run_model(
 ) 
 
 # summarise results from the hemmod model
-temp_deffect<-summary(res_mod)$res_comp$.deffect[2]
-temp_dcost<-summary(res_mod)$res_comp$.dcost[2]
-
 temp_ly_soc<-res_mod$eval_strategy_list$standard$counts %>% summarize_all(~sum(.))*cycle_length
 temp_ly_rx<-res_mod$eval_strategy_list$rx$counts %>% summarize_all(~sum(.))*cycle_length
 
@@ -398,8 +394,7 @@ temp_costs_aria_rx<-sum(res_mod$eval_strategy_list$rx$values$cost_aria)
 
 temp_rxtime<-sum(res_mod$eval_strategy_list$rx$values$rx.time) # accumulated time on treatment
 
-res_mod_summary<-data.frame(deffect=temp_deffect,dcost=temp_dcost,
-                            ly_mci_soc=temp_ly_soc[["MCI"]],ly_mci_rx=temp_ly_rx[["MCI"]],
+res_mod_summary<-data.frame(ly_mci_soc=temp_ly_soc[["MCI"]],ly_mci_rx=temp_ly_rx[["MCI"]],
                             ly_mild_soc=temp_ly_soc[["Mild"]],ly_mild_rx=temp_ly_rx[["Mild"]],
                             ly_mod_soc=temp_ly_soc[["Moderate"]],ly_mod_rx=temp_ly_rx[["Moderate"]],
                             ly_sev_soc=temp_ly_soc[["Severe"]],ly_sev_rx=temp_ly_rx[["Severe"]],

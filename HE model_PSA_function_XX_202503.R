@@ -207,8 +207,7 @@ psa_func<-function(sim.seed,
     utilities_mild_inst=utilities[6], 
     utilities_mod_inst=utilities[7], 
     utilities_sev_inst=utilities[8], 
-    utilities_death=0, 
-    
+
     disc_cost=exp(-r_cost*(model_time-1)*cycle_length), #continuously compounded discounting factor
     disc_health=exp(-r_health*(model_time-1)*cycle_length),
     
