@@ -18,6 +18,22 @@ library(flexsurv)
 library(ggpubr)
 library(rlang)
 library(mstate)
+library(table1)
+
+
+# check baseline characteristics of SveDem
+basechar_svedem<-mstatedata %>% 
+  filter(Tstart==0) %>% 
+  distinct(id,.keep_all = T) %>% 
+  mutate(base_state=case_when(from==1|from==4~1,
+                              from==2|from==5~2,
+                              from==3|from==6~3))
+
+table1::table1(~AGE+factor(base_state)|SEX,data = basechar_svedem)
+
+# check baseline characteristics of NACC
+table1::table1(~AGE+factor(NACCNE4S)|SEX,data = nacc_mci_select)
+
 
 # ************************************************************************************************
 # Steps:

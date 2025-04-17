@@ -20,6 +20,7 @@ library(flexsurv)
 library(ConfidenceEllipse)
 library(parallel)
 library(ggpubr)
+library(boot)
 
 
 # load data
@@ -145,24 +146,35 @@ clustered_boot<-function(data,indices){
 }
 
 set.seed(2025)  
+
+getcost(mci_svedem_costs)
 mci_costs_ci<-round(t(apply((boot(data=mci_svedem_costs, 
             statistic=clustered_boot, 
             R=10000,
             parallel="multicore", 
-            ncpus=18))$t,2,function(x) quantile(x,probs=c(0.025,0.975)))),0)
+            ncpus=18))$t,2,function(x) {c(mean=mean(x),
+                                          sd=sd(x),
+                                          lb=quantile(x,probs=0.025),
+                                          ub=quantile(x,probs=0.975))})),0)
+mci_costs_ci<-mci_costs_ci[,3:4]
 
+getcost(costwide)
 ad_costs_ci<-round(t(apply((boot(data=costwide, 
             statistic=clustered_boot, 
             R=10000,
             parallel="multicore", 
-            ncpus=18))$t,2,function(x) quantile(x,probs=c(0.025,0.975)))),0)
+            ncpus=18))$t,2,function(x) {c(mean=mean(x),
+                                          sd=sd(x),
+                                          lb=quantile(x,probs=0.025),
+                                          ub=quantile(x,probs=0.975))})),0)
 
-
+ad_costs_ci<-ad_costs_ci[,3:4]
 
 
 # extract utility
 source("health utility R script_XX_20250103.R")
 utilities<-as.vector(state_utility$mean)
+round(as.vector(state_utility$sd),digits = 3)
 utilities_lb<-as.vector(state_utility$lb)
 utilities_ub<-as.vector(state_utility$ub)
 
@@ -315,8 +327,8 @@ runmodel_cust<-function(rx_cycles,
   prob_severe_ariah=1-exp(-haz_severe_ariah),
   
   # costs due to ARIA
-  cost_mild_aria=13037,
-  cost_severe_aria=105102,
+  cost_mild_aria=8576,
+  cost_severe_aria=107814,
   
   
   prob_mild_aria=prob_mild_ariae+prob_mild_ariah,
@@ -701,7 +713,7 @@ sojourn<-base_mod_summary %>%
                                       "mci_inst","mild_inst","mod_inst","sev_inst","death")),
                       labels = rev(state_label)),
          strategy=factor(strategy,levels=c("soc","rx"),
-                         labels=c("SoC","Treatment")))
+                         labels=c("SoC","Lecanemab+SoC")))
 
   
 sojourn_total<-ggplot(data = sojourn %>% 
@@ -728,7 +740,7 @@ sojourn_total<-ggplot(data = sojourn %>%
 # Plot - differences in sojourn times between treatment groups by states
 sojourn_diff<-sojourn %>% 
   pivot_wider(id_cols=state, names_from='strategy', values_from='years') %>%
-  mutate(years=(Treatment-SoC), 
+  mutate(years=(`Lecanemab+SoC`-SoC), 
          strategy='difference') %>% select(state, years, strategy) %>% 
   mutate(month=years*12) 
 
@@ -749,8 +761,8 @@ sojourn_diff_plot<-ggplot(data=sojourn_diff, aes(y=month, x=state, fill=state)) 
   scale_fill_manual(values = cbp) + 
   guides(fill = guide_legend(reverse = TRUE)) 
 
-pdf(file = "sojourn time.pdf",height = 8,width = 9)
-ggarrange(sojourn_total,sojourn_diff_plot,nrow = 2,common.legend = F,labels = c("A","B"))
+pdf(file = "sojourn time.pdf",height = 7,width = 8)
+ggarrange(sojourn_total,sojourn_diff_plot,nrow = 2,common.legend = F,labels = c("A","B"),heights = c(0.7,1))
 dev.off()
 
 
@@ -872,10 +884,11 @@ plot_costs<-ggplot(aes(y=cost, x=years, color=group), data=costplot) +
   scale_y_continuous(breaks = seq(floor(min(costplot$cost)/10000)*10000, 
                                   ceiling(max(costplot$cost)/10000)*10000, by = 10000),
                      limits = c(floor(min(costplot$cost)/10000)*10000,
-                                ceiling(max(costplot$cost)/10000)*10000)) +
+                                ceiling(max(costplot$cost)/10000)*10000),
+                     labels = scales::label_number(accuracy = 1, big.mark = ",")) +
   labs(x = "Time horizon (years)", y = "Costs (2023 SEK)", color = "Strategy",
        linetype="Group") +
-  scale_color_manual(values = c("#E69F00","#56B4E9"),labels=c("Treatment","SoC")) +
+  scale_color_manual(values = c("#E69F00","#56B4E9"),labels=c("Lecanemab+SoC","SoC")) +
   theme_minimal(base_size = 15) + 
   theme(
     panel.grid = element_blank(),  
@@ -890,7 +903,8 @@ plot_costs_incr<-ggplot(costplot_incr %>%
   scale_y_continuous(breaks = seq(floor(min(costplot_incr$value)/10000)*10000, 
                                   ceiling(max(costplot_incr$value)/10000)*10000, by = 10000),
                      limits = c(floor(min(costplot_incr$value)/10000)*10000,
-                                ceiling(max(costplot_incr$value)/10000)*10000)) +
+                                ceiling(max(costplot_incr$value)/10000)*10000),
+                     labels = scales::label_number(accuracy = 1, big.mark = ",")) +
   labs(x = "Time horizon (years)", y = "Incremental costs (2023 SEK)", fill = "Type of costs",
        linetype="Group") +
   scale_fill_manual(breaks=c("Background costs of care",
@@ -909,7 +923,8 @@ plot_costs_incr<-ggplot(costplot_incr %>%
 pdf(file = "costs_overtime.pdf",height = 6,width = 12)
 ggarrange(plot_costs+theme(aspect.ratio = 1),
           plot_costs_incr+theme(aspect.ratio = 1),
-          nrow = 1,labels = c("A","B"),heights = c(1, 1))
+          nrow = 1,labels = c("A","B"),
+          heights = c(0.8, 1),widths = c(0.8,1))
 dev.off()
 
 # 6. One-way sensitivity analysis ----
@@ -1136,11 +1151,11 @@ ggplot(dsa_plot_data, aes(factor(names), price_diff, fill = level)) +
             hjust = ifelse(dsa_plot_data$price_diff > 0, -0.2, 1.2),
             size = 3, color = "black") +
   coord_flip()+
-  scale_y_continuous(labels = label_number(scale = 100),
+  scale_y_continuous(labels = scales::label_number(scale = 100),
                      breaks = seq(-1.6,1.4,0.2)) +
   scale_fill_manual(values = c("#56B4E9","#E69F00"),
                     labels=c("Lower bound of the range","Upper bound of the range")) +
-  labs(y = "Threshold annual drug price deviation from the base model (%)",
+  labs(y = "Difference from the base-case threshold annual drug price of lecanemab (%)",
        x = "Parameter",
        fill = "Parameter value") +
   theme_minimal() +
@@ -1165,8 +1180,7 @@ source("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning
 n_sim<-10000 # add a sequence indicating number of simulations
 
 psa_pop<-data.frame(rx_cycles=rep(12,4),
-                    age_group=rep("70-74 years",4),
-                    age=rep(72.5,4),
+                    age=rep(70,4),
                     apoe=c(0,0,1,1),
                     sex=c(0,1,0,1),
                     stage=rep(0,4))
@@ -1195,7 +1209,6 @@ sim_psa<-parLapply(cl,1:nrow(sim_prof),function(n) {
   
     sim.seed<-2025 + j
     rx_cycles_i<-psa_pop[i,]$rx_cycles
-    age_group_i<-psa_pop[i,]$age_group
     age_i<-psa_pop[i,]$age
     sex_i<-psa_pop[i,]$sex
     apoe_i<-psa_pop[i,]$apoe
@@ -1211,13 +1224,11 @@ sim_psa<-parLapply(cl,1:nrow(sim_prof),function(n) {
                cost_ad_psa=getcost(costwide),
                r_cost_psa=0.03,
                r_health_psa=0.03) %>% 
-        cbind(age_group=age_group_i, age=age_i, 
-              sex=sex_i, apoe=apoe_i, stage=stage_i,
+        cbind(age=age_i,sex=sex_i, apoe=apoe_i, stage=stage_i,
               error_message=NA)
       
     }, error=function(e) {
-      data.frame(age_group=age_group_i, age=age_i, 
-                 sex=sex_i, apoe=apoe_i, stage=stage_i,
+      data.frame(age=age_i,sex=sex_i, apoe=apoe_i, stage=stage_i,
                  error_message=as.character(e$message)) 
     })
     return(psa_summary %>% cbind(sim=j))
@@ -1229,7 +1240,7 @@ stopCluster(cl)
 
 save(sim_psa,file="sim_psa.RData")
 
-sim_psa_summ<-sim_psa_70 %>% 
+sim_psa_summ<-sim_psa %>% 
   filter(!is.na(cost_soc)) %>% 
   mutate(dcost=cost_rx-cost_soc,
          deffect=effect_rx-effect_soc) %>% 
@@ -1242,6 +1253,10 @@ sim_psa_summ<-sim_psa_70 %>%
   summarise(dcost=sum(dcost),
             deffect=sum(deffect),
             rx.time=sum(rx.time)) %>% 
+  ungroup %>% 
+  group_by(sex) %>% 
+  mutate(mean_cost=mean(dcost),
+         mean_effect=mean(deffect)) %>% 
   ungroup
 
 pdf(file = "psa plot.pdf",width = 8,height = 6)
@@ -1252,17 +1267,24 @@ ggplot(data=sim_psa_summ %>%
   geom_vline(xintercept = 0,color="black",linetype="solid")+
   geom_hline(yintercept = 0,color="black",linetype="solid")+
   geom_point(alpha=0.4) +
-  scale_x_continuous(breaks = seq(-0.1,0.5,by=0.1))+
+  scale_x_continuous(breaks = seq(-0.1,0.6,by=0.1))+
   scale_y_continuous(breaks = seq(floor(min(sim_psa_summ$dcost)/100000)*100000-200000, 
                                   ceiling(max(sim_psa_summ$dcost)/100000)*100000, by = 100000),
-                     limits = c(floor(min(sim_psa_summ$dcost)/100000)*10000-200000,
+                     limits = c(floor(min(sim_psa_summ$dcost)/100000)*10000-250000,
                                 ceiling(max(sim_psa_summ$dcost)/100000)*100000),
                      labels = scales::label_number(accuracy = 1, big.mark = ",")) +
   scale_color_manual(values = c("#56B4E9","pink")) +
   labs(x = "Incremental QALY",
        y = "Incremental costs (2023 SEK)") +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") +
+  geom_point(data = sim_psa_summ %>% 
+               mutate(Sex = factor(sex, levels = c(0, 1),
+                                   labels = c("Males", "Females"))) %>%
+               distinct(Sex, mean_effect, mean_cost),
+             aes(x = mean_effect, y = mean_cost),
+             fill=c("#56B4E9","pink"),
+             color="black",size = 3,shape=23)
 dev.off()
 
 
@@ -1348,18 +1370,7 @@ sub_rx_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
 sub_rx_mod_summary<-ce_summary_func(bind_rows(sub_rx_mod))
 sub_rx_mod_excel<-ce_summary_excel_func(sub_rx_mod_summary)
 
-qaly=sum(sub_rx_mod_summary$qaly_rx_w)-sum(sub_rx_mod_summary$qaly_soc_w)
-cost=sum(sub_rx_mod_summary$costs_rx_w)-sum(sub_rx_mod_summary$costs_soc_w)
-NMB=qaly*QALYval-cost
-sub_rx_price=NMB/sum(sub_rx_mod_summary$rxtime_w)
-sub_rx_price
 
-
-
-
-
-
-  
 
 # 8.2. Assuming treatment for varying durations of treatment ----
 rx_duration_mod<-parLapply(cl,c(6,c(4:10)/cycle_length),function(j){
@@ -1401,17 +1412,6 @@ rx_duration_mod_excel<-lapply(c(6,c(4:10)/cycle_length), function(i){
 }) %>% bind_rows()
 
 
-rx_duration_mod_summary %>% 
-  group_by(rx_duration) %>% 
-  summarise(dqaly=sum(qaly_rx_w)-sum(qaly_soc_w),
-            dcost=sum(costs_rx_w)-sum(costs_soc_w),
-            rxtime=sum(rxtime_w),
-            nmb=QALYval*dqaly-dcost,
-            price=nmb/rxtime)
-
-
-
-
 
 # 8.3. Treatment across time horizon with waning factor = 0.5 ----
 wf0.5_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
@@ -1445,11 +1445,6 @@ wf0.5_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
 wf0.5_mod_summary<-ce_summary_func(bind_rows(wf0.5_mod))
 wf0.5_mod_excel<-ce_summary_excel_func(wf0.5_mod_summary)
 
-qaly=sum(wf0.5_mod_summary$qaly_rx_w)-sum(wf0.5_mod_summary$qaly_soc_w)
-cost=sum(wf0.5_mod_summary$costs_rx_w)-sum(wf0.5_mod_summary$costs_soc_w)
-NMB=qaly*QALYval-cost
-wf0.5_price=NMB/sum(wf0.5_mod_summary$rxtime_w)
-wf0.5_price
 
 
 
@@ -1474,8 +1469,9 @@ apoe0_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr %>% filter(apoe==0)),function(i){
   stage_i<-pop_perc[i,]$stage
   perc<-pop_perc[i,]$pop_perc
   
-  temp_model<-runmodel_cust(rx_cycles=rx_cycles_i,rx_rr=0.69,
-                            rx_inst=0,wane_fc=1,
+  temp_model<-scen_runmodel_cust(rx_cycles=rx_cycles_i,rx_rr=0.69,wane_fc=1,
+                            rx_inst=0,rx_sex_mod=0,rx_age_mod=0,rx_apoe_mod=1,
+                            rx_mci_mod=0,rx_ad_mod=0,
                             age_init = age_i,sex=sex_i,
                             apoegeno=apoe_i,start_state=stage_i,
                             cost_mci=getcost(mci_svedem_costs),
@@ -1483,7 +1479,7 @@ apoe0_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr %>% filter(apoe==0)),function(i){
                             r_cost=0.03,
                             r_health=0.03)
   
-  return(temp_model[1][[1]] %>% 
+  return(temp_model %>% 
            cbind(rx_cycles=rx_cycles_i,age_group=age_group_i,age=age_i,
                  sex=sex_i,apoe=apoe_i,stage=stage_i, perc=perc))
 })
@@ -1491,14 +1487,6 @@ apoe0_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr %>% filter(apoe==0)),function(i){
 
 apoe0_mod_summary<-ce_summary_func(bind_rows(apoe0_mod))
 apoe0_mod_excel<-ce_summary_excel_func(apoe0_mod_summary)
-
-
-qaly=sum(apoe0_mod_summary$qaly_rx_w)-sum(apoe0_mod_summary$qaly_soc_w)
-cost=sum(apoe0_mod_summary$costs_rx_w)-sum(apoe0_mod_summary$costs_soc_w)
-NMB=qaly*QALYval-cost
-apoe0_price=NMB/sum(apoe0_mod_summary$rxtime_w)
-apoe0_price
-
 
 
 
@@ -1518,16 +1506,17 @@ apoe1_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr %>% filter(apoe==1)),function(i){
   stage_i<-pop_perc[i,]$stage
   perc<-pop_perc[i,]$pop_perc
   
-  temp_model<-runmodel_cust(rx_cycles=rx_cycles_i,rx_rr=0.69,
-                            rx_inst=0,wane_fc=1,
-                            age_init = age_i,sex=sex_i,
-                            apoegeno=apoe_i,start_state=stage_i,
-                            cost_mci=getcost(mci_svedem_costs),
-                            cost_ad=getcost(costwide),
-                            r_cost=0.03,
-                            r_health=0.03)
+  temp_model<-scen_runmodel_cust(rx_cycles=rx_cycles_i,rx_rr=0.69,wane_fc=1,
+                                 rx_inst=0,rx_sex_mod=0,rx_age_mod=0,rx_apoe_mod=1,
+                                 rx_mci_mod=0,rx_ad_mod=0,
+                                 age_init = age_i,sex=sex_i,
+                                 apoegeno=apoe_i,start_state=stage_i,
+                                 cost_mci=getcost(mci_svedem_costs),
+                                 cost_ad=getcost(costwide),
+                                 r_cost=0.03,
+                                 r_health=0.03)
   
-  return(temp_model[1][[1]] %>% 
+  return(temp_model %>% 
            cbind(rx_cycles=rx_cycles_i,age_group=age_group_i,age=age_i,
                  sex=sex_i,apoe=apoe_i,stage=stage_i, perc=perc))
 })
@@ -1537,12 +1526,6 @@ apoe1_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr %>% filter(apoe==1)),function(i){
 
 apoe1_mod_summary<-ce_summary_func(bind_rows(apoe1_mod))
 apoe1_mod_excel<-ce_summary_excel_func(apoe1_mod_summary)
-
-qaly=sum(apoe1_mod_summary$qaly_rx_w)-sum(apoe1_mod_summary$qaly_soc_w)
-cost=sum(apoe1_mod_summary$costs_rx_w)-sum(apoe1_mod_summary$costs_soc_w)
-NMB=qaly*QALYval-cost
-apoe1_price=NMB/sum(apoe1_mod_summary$rxtime_w)
-apoe1_price
 
 
 
@@ -1581,14 +1564,6 @@ disc_diff_mod<-parLapply(cl,1:nrow(pop_perc_rx3yr),function(i){
 
 disc_diff_mod_summary<-ce_summary_func(bind_rows(disc_diff_mod))
 disc_diff_mod_excel<-ce_summary_excel_func(disc_diff_mod_summary)
-
-qaly=sum(disc_diff_mod_summary$qaly_rx_w)-sum(disc_diff_mod_summary$qaly_soc_w)
-cost=sum(disc_diff_mod_summary$costs_rx_w)-sum(disc_diff_mod_summary$costs_soc_w)
-NMB=qaly*QALYval-cost
-disc_diff_price=NMB/sum(disc_diff_mod_summary$rxtime_w)
-disc_diff_price
-
-
 
 
 
@@ -1637,10 +1612,11 @@ scen_sum_function<-function(mod_summary){
             set_names(c("soc","rx","diff","out"))) %>% 
     mutate(across(c(soc, rx, diff), 
                   ~ ifelse(grepl("costs|price",out), 
-                           format(round(., 0),nsmall=0), 
-                           format(round(., 2),nsmall=2)))) %>% 
+                           format(round(., 0),nsmall=0,big.mark = ",", scientific = FALSE), 
+                           format(round(., 2),nsmall=2,big.mark = ",", scientific = FALSE)))) %>% 
     mutate(soc=ifelse(out %in% c("rx.time", "price"),"-",soc),
-           diff=ifelse(out %in% c("rx.time", "price"),"-",diff))
+           diff=ifelse(out %in% c("rx.time", "price"),"-",diff)) %>% 
+    rbind(c("-",round((price-bc_price)/bc_price*100,digits = 2),"-","price_dev"))
   
   return(temp_sum)
 }

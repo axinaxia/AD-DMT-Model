@@ -159,8 +159,8 @@ scen_runmodel_cust<-function(rx_cycles,
   prob_severe_ariah=1-exp(-haz_severe_ariah),
   
   # costs due to ARIA
-  cost_mild_aria=13037,
-  cost_severe_aria=105102,
+  cost_mild_aria=8576,
+  cost_severe_aria=107814,
   
   
   prob_mild_aria=prob_mild_ariae+prob_mild_ariah,
