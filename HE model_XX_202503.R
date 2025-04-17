@@ -24,7 +24,7 @@ library(boot)
 
 
 # load data
-setwd("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/AD DMT HE model/Statistical analyses/New analyses_XX_202412/")
+
 
 load("costdata_xx.RData")
 load("models_xx.RData")
@@ -78,12 +78,10 @@ model_trans18<-final_model_trans13 # institutionalized severe AD to death
 
 # ************************************************************************************************
 # Considerations:
-# 1. The model for each transition was selected based on previous analyses specified in the 
-#    R script "Flexible parametric multistate model_XX_202501.R".
-# 2. Consider the time horizon for later HE modeling when predicting transition probabilities:
+# 1. Consider the time horizon for later HE modeling when predicting transition probabilities:
 #    cycle_length=3 #in months (0.25 years)
 #    cycles=12/cycle_length*10 #10 year time horizon (40 cycles)
-# 3. Considering APOE e4 genotypes and adverse events
+# 2. Considering APOE e4 genotypes and adverse events
 # ************************************************************************************************
 
 
@@ -1173,7 +1171,7 @@ dev.off()
 # 2. Uncertainty around transition probabilities estimated from individual-level data
 # 3. Costs by disease states
 # ************************************************************************************************
-source("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/AD DMT HE model/Statistical analyses/New analyses_XX_202412/HE model_PSA_function_XX_202503.R")
+source("HE model_PSA_function_XX_202503.R")
 
 
 
