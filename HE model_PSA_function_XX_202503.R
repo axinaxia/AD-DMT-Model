@@ -20,7 +20,7 @@ library(parallel)
 library(mstate)
 
 # load data
-setwd("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/AD DMT HE model/Statistical analyses/New analyses_XX_202412/")
+
 
 load("costdata_xx.RData")
 load("models_xx.RData")
