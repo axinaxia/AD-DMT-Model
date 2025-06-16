@@ -77,7 +77,7 @@ model_trans18<-final_model_trans13 # institutionalized severe AD to death
 # ************************************************************************************************
 # Considerations:
 # 1. The model for each transition was selected based on previous analyses specified in the 
-#    R script "Flexible parametric multistate model_XX_202501.R".
+#    R script "Flexible parametric multistate model_XX_2025.R".
 # 2. Consider the time horizon for later HE modeling when predicting transition probabilities:
 #    cycle_length=3 #in months (0.25 years)
 #    cycles=12/cycle_length*10 #10 year time horizon (40 cycles)
