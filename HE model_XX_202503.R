@@ -24,8 +24,6 @@ library(boot)
 
 
 # load data
-setwd("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/AD DMT HE model/Statistical analyses/New analyses_XX_202412/")
-
 load("costdata_xx.RData")
 load("models_xx.RData")
 
@@ -1173,7 +1171,7 @@ dev.off()
 # 2. Uncertainty around transition probabilities estimated from individual-level data
 # 3. Costs by disease states
 # ************************************************************************************************
-source("C:/Users/xinxia/OneDrive - Karolinska Institutet/CSF-registersamkörning/AD DMT HE model/Statistical analyses/New analyses_XX_202412/HE model_PSA_function_XX_202503.R")
+source("HE model_PSA_function_XX_202503.R")
 
 
 
