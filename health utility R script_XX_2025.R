@@ -2,43 +2,26 @@ library(readxl)
 library(tidyverse)
 
 
+
 # Read in the data
-utility_df_raw<-read_excel("literature review of utility of AD.xlsx", skip=2, col_names=c('Study', 
-                                                                                 'Timepoint',
-                                                                                 'Country', 
-                                                                                 'Study_design',
-                                                                                 'Setting',
-                                                                                 'n_total_self',
-                                                                                 'n_mci_self',
-                                                                                 'mean_mci_self',
-                                                                                 'n_mild_self',
-                                                                                 'mean_mild_self',
-                                                                                 'n_mod_self',
-                                                                                 'mean_mod_self',
-                                                                                 'n_mildmod_self',
-                                                                                 'mean_mildmod_self',
-                                                                                 'n_severe_self',
-                                                                                 'mean_sev_self',
-                                                                                 'n_ns_self',
-                                                                                 'mean_ns_self',
-                                                                                 'n_tot_proxy',
-                                                                                 'n_mci_proxy', 
-                                                                                 'mean_mci_proxy',
-                                                                                 'n_mild_proxy',
-                                                                                 'mean_mild_proxy',
-                                                                                 'n_mod_proxy',
-                                                                                 'mean_mod_proxy',
-                                                                                 'n_mildmod_proxy',
-                                                                                 'mean_mildmod_proxy',
-                                                                                 'n_sev_proxy',
-                                                                                 'mean_sev_proxy',
-                                                                                 'n_ns_proxy',
-                                                                                 'mean_ns_proxy',
-                                                                                 'comments'
-))
+utility_df_raw<-read_excel("literature review of utility.xlsx", sheet = "included studies"
+                           ,skip=2, col_names=c('Study', 'Timepoint','Country', 
+                                                'Study_design','Study_population','Setting',
+                                                'n_total_self','n_mci_self','mean_mci_self',
+                                                'n_mild_self','mean_mild_self',
+                                                'n_mod_self','mean_mod_self',
+                                                'n_sev_self','mean_sev_self',
+                                                'n_tot_proxy','n_mci_proxy', 'mean_mci_proxy',
+                                                'n_mild_proxy','mean_mild_proxy',
+                                                'n_mod_proxy','mean_mod_proxy',
+                                                'n_sev_proxy','mean_sev_proxy')) %>%
+  filter(!is.na(Study)) %>%
+  mutate(row_num=row_number()) %>%
+  filter(row_num<which(Study=="Glossary of terms")[1]) %>%
+  select(-row_num)
+
 
 #parse means and stdev
-
 parse_mean_sd<-function(x){
   r=data.frame(mean=rep(NA, length(x)),
                sd=rep(NA, length(x)))
@@ -54,31 +37,11 @@ parse_mean_sd<-function(x){
 }
 
 utility_df_long <- utility_df_raw %>%
-  pivot_longer(cols = n_mci_self:mean_ns_proxy, 
+  pivot_longer(cols = n_mci_self:mean_sev_proxy, 
                names_to=c(".value", "group", "rater"), 
-               names_pattern = "(.*)_(.*)_(.*)"
-               ) %>%
-  filter(!is.na(n)) %>% # remove studies without sample sizes for each disease state
+               names_pattern = "(.*)_(.*)_(.*)") %>%
   mutate(parse_mean_sd(mean)) %>% 
-  filter(!is.na(sd)) %>% # remove studies without standard deviations for each disease state
-  filter(group!="ns") # remove studies without information on disease state
-  
-
-table((utility_df_long %>% 
-         filter(rater=="self"|rater=="proxy",
-                group %in% c("mci")))$Setting)
-
-table((utility_df_long %>% 
-         filter(rater=="proxy",
-                group %in% c("mild")))$Setting)
-
-table((utility_df_long %>% 
-         filter(rater=="proxy",
-                group %in% c("mod")))$Setting)
-
-table((utility_df_long %>% 
-         filter(rater=="proxy",
-                group %in% c("sev")))$Setting)
+  filter(!is.na(mean))
 
 
 #meta/analytic estimate
@@ -86,66 +49,141 @@ library(meta)
 estimate_sd <- function(data) {
   
   metares <- metamean(n, mean, sd, Study, 
-                      data = data)
-  data.frame(n=sum(metares$n), mean=metares$TE.common, sd=metares$seTE.common,
-             lb=metares$lower.common,ub=metares$upper.common)
+                      data = data, random = T)
+  data.frame(n=sum(metares$n), mean=metares$TE.random, sd=metares$seTE.random,
+             lb=metares$lower.random,ub=metares$upper.random, i2=metares$I2)
 }
 
 
 table(utility_df_long$Setting,utility_df_long$group)
 
 
+
 # compile utility by states and settings
 state_utility<-estimate_sd(data=utility_df_long %>% 
                              filter(group=="mci",
-                                    rater=="self"|rater=="proxy",
+                                    rater=="self",
                                     Setting %in% c("Comm","Mixed"))) %>% 
   mutate(state="MCI") %>% 
-  rbind(estimate_sd(data=utility_df_long %>% 
-                      filter(group=="mci",
-                             rater=="self"|rater=="proxy",
-                             Setting %in% c("Institute","Mixed"))) %>% 
-          mutate(state="MCI_inst")) %>% 
   
   rbind(estimate_sd(data=utility_df_long %>% 
                   filter(group=="mild",
                          rater=="proxy",
-                         Setting %in% c("Comm","Gen pub","Mixed"))) %>% 
-      mutate(state="Mild") %>% 
-      rbind(estimate_sd(data=utility_df_long %>% 
+                         Setting %in% c("Comm","Mixed"))) %>% 
+          mutate(state="Mild")) %>% 
+  
+  rbind(estimate_sd(data=utility_df_long %>% 
                           filter(group=="mild",
                                  rater=="proxy",
                                  Setting %in% c("Institute","Mixed"))) %>% 
-              mutate(state="Mild_inst"))) %>% 
+          mutate(state="Mild_inst")) %>% 
+  
   rbind(estimate_sd(data=utility_df_long %>% 
-                  filter(group=="mod",
-                         rater=="proxy",
-                         Setting %in% c("Comm","Gen pub","Mixed"))) %>% 
-      mutate(state="Moderate") %>% 
-      rbind(estimate_sd(data=utility_df_long %>% 
-                          filter(group=="mod",
-                                 rater=="proxy",
-                                 Setting %in% c("Institute","Mixed"))) %>% 
-              mutate(state="Moderate_inst"))) %>% 
+                      filter(group=="mod",
+                             rater=="proxy",
+                             Setting %in% c("Comm","Mixed"))) %>% 
+          mutate(state="Moderate")) %>% 
+  
   rbind(estimate_sd(data=utility_df_long %>% 
-                  filter(group=="sev",
-                         rater=="proxy",
-                         Setting %in% c("Comm","Gen pub","Mixed"))) %>% 
-      mutate(state="Severe") %>% 
-      rbind(estimate_sd(data=utility_df_long %>% 
-                          filter(group=="sev",
-                                 rater=="proxy",
-                                 Setting %in% c("Institute","Mixed"))) %>% 
-              mutate(state="Severe_inst"))
-  )
+                      filter(group=="mod",
+                             rater=="proxy",
+                             Setting %in% c("Institute","Mixed"))) %>% 
+          mutate(state="Moderate_inst")) %>% 
+  
+  rbind(estimate_sd(data=utility_df_long %>%
+                      filter(group=="sev",
+                             rater=="proxy",
+                             Setting %in% c("Comm","Mixed"))) %>% 
+          mutate(state="Severe")) %>% 
+  
+  rbind(estimate_sd(data=utility_df_long %>% 
+                      filter(group=="sev",
+                             rater=="proxy",
+                             Setting %in% c("Institute","Mixed"))) %>% 
+          mutate(state="Severe_inst"))
+
+
+state_utility<-state_utility %>% 
+  rbind(data=utility_df_long %>%
+          filter(group=="mci",
+                 rater=="self",
+                 Setting %in% c("Institute","Mixed")) %>% 
+          mutate(state="MCI_inst",
+                 lb=mean-1.98*(sd/sqrt(n)),
+                 ub=mean+1.98*(sd/sqrt(n)),
+                 i2=NA) %>% 
+          select(n,mean,sd,lb,ub,i2,state))
 
 
 
 
 state_utility<-state_utility %>% 
-  mutate(state=factor(state, levels=c("MCI", "Mild", "Moderate", "Severe", 
-                                      "MCI_inst", "Mild_inst", "Moderate_inst", "Severe_inst"),
-                      labels=c("MCI", "Mild", "Moderate", "Severe",
-                               "MCI_inst", "Mild_inst", "Moderate_inst", "Severe_inst"))) %>% 
+  mutate(state=factor(state, levels=c("MCI","Mild","Moderate","Severe",
+                                      "MCI_inst","Mild_inst","Moderate_inst","Severe_inst"),
+                      labels=c("MCI","Mild","Moderate","Severe",
+                               "MCI_inst","Mild_inst","Moderate_inst","Severe_inst"))) %>% 
   arrange(state)
 
+
+
+n_study<-c("MCI",n_distinct(utility_df_long %>% 
+                       filter(group=="mci",
+                              rater=="self",
+                              Setting %in% c("Comm","Mixed")) %>% 
+                      select(Study))) %>% 
+  
+  rbind(c("MCI_inst",n_distinct(utility_df_long %>% 
+                                   filter(group=="mci",
+                                          rater=="self",
+                                          Setting %in% c("Institute","Mixed")) %>% 
+                                   select(Study)))) %>% 
+  
+  rbind(c("Mild",n_distinct(utility_df_long %>% 
+                      filter(group=="mild",
+                             rater=="proxy",
+                             Setting %in% c("Comm","Mixed")) %>% 
+                     select(Study)))) %>% 
+  
+  rbind(c("Mild_inst",n_distinct(utility_df_long %>% 
+                      filter(group=="mild",
+                             rater=="proxy",
+                             Setting %in% c("Institute","Mixed")) %>% 
+                     select(Study)))) %>% 
+  
+  rbind(c("Moderate",n_distinct(utility_df_long %>% 
+                      filter(group=="mod",
+                             rater=="proxy",
+                             Setting %in% c("Comm","Mixed")) %>% 
+                     select(Study)))) %>% 
+  
+  rbind(c("Moderate_inst",n_distinct(utility_df_long %>% 
+                      filter(group=="mod",
+                             rater=="proxy",
+                             Setting %in% c("Institute","Mixed")) %>% 
+                     select(Study)))) %>% 
+  
+  rbind(c("Severe",n_distinct(utility_df_long %>%
+                      filter(group=="sev",
+                             rater=="proxy",
+                             Setting %in% c("Comm","Mixed")) %>% 
+                     select(Study)))) %>% 
+  
+  rbind(c("Severe_inst",n_distinct(utility_df_long %>% 
+                      filter(group=="sev",
+                             rater=="proxy",
+                             Setting %in% c("Institute","Mixed")) %>% 
+                      select(Study)))) %>% 
+  as.data.frame() %>% 
+  set_names(c("state", "n_study"))
+
+
+state_utility<-state_utility %>% 
+  left_join(n_study)
+
+
+state_utility %>% 
+  mutate(ci=paste0(format(round(mean, 2), nsmall=2), " (", 
+                  format(round(lb, 2), nsmall=2), "-", 
+                  format(round(ub, 2), nsmall=2), ")"),
+         sd_r=format(round(sd, 3), nsmall=3),
+         mean_r=format(round(mean, 2), nsmall=2))
