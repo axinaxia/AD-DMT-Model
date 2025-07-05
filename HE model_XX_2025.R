@@ -17,7 +17,6 @@ library(survminer)
 library(pbapply) 
 library(data.table)
 library(flexsurv)
-library(ConfidenceEllipse)
 library(parallel)
 library(ggpubr)
 library(boot)
@@ -1647,7 +1646,6 @@ rx_inst_mod_excel<-ce_summary_excel_func(rx_inst_mod_summary)
 
 
 
-stopCluster(cl)
 
 
 # 8.7. 4-year treatment with waning factor = 0.5, 0.1, or 0.25 ----
@@ -1745,7 +1743,7 @@ wf0.25_mod_summary<-ce_summary_func(bind_rows(wf0.25_mod))
 wf0.25_mod_excel<-ce_summary_excel_func(wf0.25_mod_summary)
 
 
-
+stopCluster(cl)
 
 
 # 8.8. Summarise results from scenario analyses ----
